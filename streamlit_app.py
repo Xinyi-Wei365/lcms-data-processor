@@ -9,7 +9,7 @@ import streamlit as st
 import pandas as pd
 import tempfile
 import os
-from process_lcms_data import process, TARGET_COMPS, ALL_COMPS
+from process_lcms_data import process, read_raw, classify_compounds
 
 st.set_page_config(
     page_title="LC-MS/MS 数据处理智能体",
@@ -156,7 +156,7 @@ if process_btn and uploaded_file:
             # 清理临时文件
             os.unlink(input_path)
 
-            st.success(f"✅ 处理完成！生成 {len(TARGET_COMPS)} 个目标化合物的数据")
+            st.success("✅ 处理完成！")
 
             # 预览结果
             st.subheader("📋 处理结果预览")
@@ -235,14 +235,4 @@ else:
             st.metric("输出单位", output_unit)
 
     st.markdown("---")
-    st.markdown("### 📐 表格结构说明")
-    st.markdown(f"""
-    | 工作表 | 说明 | 化合物数 |
-    |--------|------|---------|
-    | Matrix spike | 基质加标浓度 + 回收率 + 统计 | {len(ALL_COMPS)} (含IS/SS) |
-    | Blanks_MDL | 空白检出限 + MDL | {len(ALL_COMPS)} |
-    | Conc. in bottle | 瓶内实测浓度 | {len(TARGET_COMPS)} |
-    | Final conc | 最终计算浓度 + 统计 | {len(TARGET_COMPS)} |
-    | 统计计算结果 | 辅助统计表 | {len(TARGET_COMPS)} |
-    | 计算说明 | 公式说明 | - |
-    """)
+    
