@@ -181,9 +181,19 @@ if process_btn and uploaded_file:
 
                     if preview_data:
                         df_preview = pd.DataFrame(preview_data)
-                        # 第一行作为列名
+                        # 第一行作为列名，处理重复列名
                         if len(preview_data) > 1:
-                            df_preview.columns = df_preview.iloc[0]
+                            cols = []
+                            seen = {}
+                            for v in df_preview.iloc[0]:
+                                s = str(v) if v is not None else ''
+                                if s in seen:
+                                    seen[s] += 1
+                                    cols.append(f'{s}_{seen[s]}')
+                                else:
+                                    seen[s] = 0
+                                    cols.append(s)
+                            df_preview.columns = cols
                             df_preview = df_preview.iloc[1:]
                         st.dataframe(df_preview, use_container_width=True)
                     st.caption(f"工作表: {ws.max_row}行 × {ws.max_column}列")
