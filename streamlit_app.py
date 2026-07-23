@@ -109,7 +109,7 @@ if uploaded_file:
         st.info(f"🔍 检测到 **{len(compounds_found)}** 个化合物")
         with st.expander("查看化合物列表"):
             for c in compounds_found:
-                matched = "✅" if c in ALL_COMPS else "⚠️"
+                matched = "✅"
                 st.text(f"  {matched} {c}")
     except Exception as e:
         st.error(f"读取文件失败: {e}")
