@@ -255,7 +255,7 @@ def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike):
             sty(c, S['rec'])
         rr = f'{rec_cl}{row}:{rec_cr}{row}'
         ws.cell(row=row, column=stat_col, value=f'=ROUND(AVERAGE({rr}),0)'); ws.cell(row=row,column=stat_col).number_format = '0'
-        ws.cell(row=row, column=sd_col, value=f'=ROUND(STDEV.S({rr}),0)'); ws.cell(row=row,column=sd_col).number_format = '0'
+        ws.cell(row=row, column=sd_col, value=f'=ROUND(STDEV({rr}),0)'); ws.cell(row=row,column=sd_col).number_format = '0'
         ws.cell(row=row, column=se_col, value=f'=ROUND({get_column_letter(sd_col)}{row}/SQRT(COUNT({rr})),0)'); ws.cell(row=row,column=se_col).number_format = '0'
         sty(ws.cell(row=row, column=stat_col), S['data'])
         sty(ws.cell(row=row, column=sd_col), S['data'])
@@ -456,7 +456,7 @@ def build_sheet4(wb, raw_data, sample_cols, target_compounds, all_compounds, bla
             sty(ws.cell(row=row, column=col), S['stat'])
 
         for col, pct in [(10,0.05),(11,0.25),(12,0.75),(13,0.95)]:
-            ws.cell(row=row, column=col, value=f'=IF($D{row}>50%,PERCENTILE.INC({sr},{pct}),"NC")'); ws.cell(row=row,column=col).number_format = '0.000000'
+            ws.cell(row=row, column=col, value=f'=IF($D{row}>50%,PERCENTILE({sr},{pct}),"NC")'); ws.cell(row=row,column=col).number_format = '0.000000'
             sty(ws.cell(row=row, column=col), S['stat'])
 
         for i in range(n_s):
