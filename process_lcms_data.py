@@ -141,15 +141,35 @@ def classify_compounds(compounds):
 # 原始数据读取
 # ============================================================
 def read_raw(filepath_or_bytes):
-    """读取原始数据，支持文件路径或 bytes"""
+    """读取原始数据，支持文件路径或 bytes，自动识别列结构"""
     if isinstance(filepath_or_bytes, bytes):
         wb = openpyxl.load_workbook(io.BytesIO(filepath_or_bytes), data_only=True)
     else:
         wb = openpyxl.load_workbook(filepath_or_bytes, data_only=True)
     ws = wb['Sheet1']
 
+    # ---- 自动识别化合物名称列和数据起始列 ----
+    # 规则：第 2 行中找到包含 "名称" 的列 → 化合物列
+    #        数据从该化合物列之后的第一列开始
+    # 如果找不到 "名称"，fallback 到第 2 列（旧格式兼容）
+    compound_col = 2  # 默认 B 列
+    data_start_col = 4  # 默认 D 列
+
+    for col in range(1, ws.max_column + 1):
+        v = str(ws.cell(row=2, column=col).value or '').strip()
+        if v == '名称':
+            compound_col = col
+            # 数据从化合物列的下一个非空列开始
+            data_start_col = col + 1
+            # 如果下一列是 "离子对"，再往后跳一列
+            next_v = str(ws.cell(row=2, column=col+1).value or '').strip()
+            if '离子' in next_v or next_v == '':
+                data_start_col = col + 2 if col + 2 <= ws.max_column else col + 1
+            break
+
+    # ---- 分类列（BLANK / MS / QC / Sample） ----
     blanks, mss, samps = [], [], []
-    for col in range(4, ws.max_column + 1):
+    for col in range(data_start_col, ws.max_column + 1):
         hdr = str(ws.cell(row=1, column=col).value or '')
         cl = get_column_letter(col)
         if 'BLANK' in hdr.upper():
@@ -161,20 +181,20 @@ def read_raw(filepath_or_bytes):
         else:
             samps.append((col, cl, hdr))
 
-    # 读取化合物名称
+    # ---- 读取化合物名称 ----
     compounds_raw = []
     for row in range(3, ws.max_row + 1):
-        nm = str(ws.cell(row=row, column=2).value or '').strip()
+        nm = str(ws.cell(row=row, column=compound_col).value or '').strip()
         if nm:
             compounds_raw.append(nm)
 
-    # 读取数据
+    # ---- 读取数据矩阵 ----
     data = {}
     for row in range(3, ws.max_row + 1):
-        nm = str(ws.cell(row=row, column=2).value or '').strip()
+        nm = str(ws.cell(row=row, column=compound_col).value or '').strip()
         if not nm: continue
         data[nm] = {}
-        for col in range(4, ws.max_column + 1):
+        for col in range(data_start_col, ws.max_column + 1):
             data[nm][get_column_letter(col)] = ws.cell(row=row, column=col).value
     wb.close()
 
