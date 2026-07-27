@@ -208,9 +208,11 @@ def read_raw(filepath_or_bytes):
 # ============================================================
 # Sheet 1: 基质加标浓度
 # ============================================================
-def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike):
+def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike, ss_spike=None):
     ws = wb.create_sheet('Matrix spike  基质加标浓度')
     n_ms = len(ms_cols)
+    if ss_spike is None:
+        ss_spike = spike
 
     ms_start, mid1 = 2, 2 + n_ms
     rec_lbl, rec_start = mid1 + 1, mid1 + 2
@@ -251,7 +253,9 @@ def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike):
         for i, (_, cl, _) in enumerate(ms_cols):
             v = safe_float(raw_data.get(comp, {}).get(cl))
             c = ws.cell(row=row, column=rec_start+i)
-            if v is not None: c.value = round_int((v / spike) * 100); c.number_format = '0'
+            if v is not None:
+                the_spike = ss_spike if re.match(r'd\d+-', comp) else spike
+                c.value = round_int((v / the_spike) * 100); c.number_format = '0'
             sty(c, S['rec'])
         rr = f'{rec_cl}{row}:{rec_cr}{row}'
         ws.cell(row=row, column=stat_col, value=f'=ROUND(AVERAGE({rr}),0)'); ws.cell(row=row,column=stat_col).number_format = '0'
@@ -274,12 +278,12 @@ def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike):
             for i, (_, cl, _) in enumerate(ms_cols):
                 v = safe_float(raw_data.get(ss, {}).get(cl))
                 c = ws.cell(row=row, column=ms_start+i)
-                if v is not None: c.value = round6(v / spike); c.number_format = '0.000000'
+                if v is not None: c.value = round6(v / ss_spike); c.number_format = '0.000000'
                 sty(c, S['data'])
             for i, (_, cl, _) in enumerate(ms_cols):
                 v = safe_float(raw_data.get(ss, {}).get(cl))
                 c = ws.cell(row=row, column=rec_start+i)
-                if v is not None: c.value = round_int((v / spike) * 100); c.number_format = '0'
+                if v is not None: c.value = round_int((v / ss_spike) * 100); c.number_format = '0'
                 sty(c, S['rec'])
             row += 1
 
@@ -535,6 +539,7 @@ def build_info(wb, S, cfg, n_target, n_all):
 def process(config=None, return_bytes=False):
     cfg = config or {}
     spike = cfg.get('spike_conc_ppb', 10)
+    ss_spike = cfg.get('ss_spike_conc_ppb', spike)
     cf = cfg.get('conversion_factor', 1)
     unit = cfg.get('output_unit', 'ng/mL')
     mh_unit = cfg.get('masshunter_unit', 'ppb')
@@ -549,7 +554,7 @@ def process(config=None, return_bytes=False):
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    build_sheet1(wb, raw_data, mss, all_c, S, spike)
+    build_sheet1(wb, raw_data, mss, all_c, S, spike, ss_spike)
     _, binfo = build_sheet2(wb, raw_data, blanks, all_c, S, cf, unit)
     build_sheet3(wb, raw_data, samps, target, S, mh_unit)
     build_sheet4(wb, raw_data, samps, target, all_c, binfo, S, cf, unit)
