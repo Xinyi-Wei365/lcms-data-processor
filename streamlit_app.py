@@ -219,6 +219,8 @@ if uploaded_file:
 
 if uploaded_file:
     file_bytes = uploaded_file.getvalue()
+
+if file_bytes:
     st.subheader(t('raw_preview', L))
     try:
         raw_data, blanks, mss, samps, target, is_c, ss_c, all_c = read_raw(file_bytes)
@@ -249,7 +251,7 @@ if uploaded_file:
 # 处理按钮
 # ============================================================
 st.divider()
-process_btn = st.button(t('process_btn', L), type="primary", disabled=(uploaded_file is None), use_container_width=True)
+process_btn = st.button(t('process_btn', L), type="primary", disabled=(file_bytes is None), use_container_width=True)
 
 if process_btn and file_bytes:
     with st.spinner(t('processing', L)):
