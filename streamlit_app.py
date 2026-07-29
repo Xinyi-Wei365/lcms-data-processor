@@ -48,10 +48,10 @@ with st.sidebar:
 
     if is_corrected:
         auto_cf = 1.0
-        st.caption("💡 有内标校正，换算因子自动设为 **1**")
+        st.caption("💡 有内标校正，导出值已是原始样本浓度，换算因子 = 1")
     else:
         auto_cf = round(final_vol / sample_vol * extra_dil, 6)
-        st.caption(f"💡 无内标校正，换算因子 = {final_vol}/{sample_vol}×{extra_dil} = **{auto_cf}**")
+        st.caption("💡 无内标校正，导出值是进样瓶浓度，换算因子 = 定容体积 ÷ 取样量 × 稀释倍数")
 
     conversion_factor = st.number_input(
         "换算因子" + ("（已锁定）" if is_corrected else "（可手动覆盖）"),
