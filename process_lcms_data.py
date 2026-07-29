@@ -156,8 +156,44 @@ def read_raw(filepath_or_bytes):
         data[nm] = {}
         for col in range(data_start_col, ws.max_column + 1):
             data[nm][get_column_letter(col)] = ws.cell(row=row, column=col).value
+    # 读取化合物名称用于分类
+    compounds_raw = []
+    for row in range(3, ws.max_row + 1):
+        nm = str(ws.cell(row=row, column=compound_col).value or '').strip()
+        if nm: compounds_raw.append(nm)
     wb.close()
-    return data, blanks, mss, samps
+
+    target, is_c, ss_c = classify_compounds(compounds_raw)
+    all_c = target + is_c + ss_c
+    return data, blanks, mss, samps, target, is_c, ss_c, all_c
+
+
+# ============================================================
+# 化合物自动分类
+# ============================================================
+def classify_compounds(compounds):
+    bac, ddac, atmac, metabolites, is_list, ss_list, others = [], [], [], [], [], [], []
+    for c in compounds:
+        cn = str(c).strip()
+        if not cn: continue
+        if any(kw in cn for kw in ['[C13]', 'COOH', '-d6', '-d3', 'OH-d3']): is_list.append(cn)
+        elif re.match(r'd\d+-', cn): ss_list.append(cn)
+        elif 'DDAC' in cn.upper(): ddac.append(cn)
+        elif 'ATMAC' in cn.upper(): atmac.append(cn)
+        elif 'BAC' in cn.upper(): bac.append(cn)
+        else: others.append(cn)
+    def sk(n):
+        nums = re.findall(r'C(\d+)', n)
+        return int(nums[0]) if nums else 0
+    bac.sort(key=sk); ddac.sort(key=sk); atmac.sort(key=sk)
+    metabolites.sort(key=sk); is_list.sort(key=sk); ss_list.sort(key=sk)
+    pure_bac = []; meta = []
+    for c in bac:
+        if '+O' in c or '+2O' in c: meta.append(c)
+        else: pure_bac.append(c)
+    metabolites = meta + metabolites
+    target = pure_bac + ddac + atmac + metabolites + others
+    return target, is_list, ss_list
 
 
 # ============================================================
@@ -689,7 +725,7 @@ def process(config=None, return_bytes=False):
     """
     cfg = config or CONFIG
     print(f"Reading: {cfg['input_file']}")
-    raw_data, blanks, mss, samps = read_raw(cfg['input_file'])
+    raw_data, blanks, mss, samps, target, is_c, ss_c, all_c = read_raw(cfg['input_file'])
 
     # 验证
     missing = [c for c in ALL_COMPS if c not in raw_data]
