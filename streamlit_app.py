@@ -36,10 +36,30 @@ with st.sidebar:
         final_vol = st.number_input("定容体积 (mL)", value=0.5, step=0.1, format="%.1f")
 
     extra_dil = st.number_input("额外稀释倍数", value=1, step=1, min_value=1)
-    auto_cf = round(final_vol / sample_vol * extra_dil, 6)
-    st.caption(f"💡 换算因子 = {final_vol}/{sample_vol}×{extra_dil} = **{auto_cf}**（若已为原始浓度则填 1）")
 
-    conversion_factor = st.number_input("换算因子", value=1.0, step=0.001, format="%.6f")
+    # 内标校正开关
+    use_is = st.radio(
+        "数据是否经过内标（IS）校正？",
+        options=["✅ 是，有内标校正", "❌ 否，无内标校正"],
+        index=0,
+        help="内标校正后，导出值已是原始样本浓度，换算因子=1；无内标校正则需要手动换算"
+    )
+    is_corrected = use_is.startswith("✅")
+
+    if is_corrected:
+        auto_cf = 1.0
+        st.caption("💡 有内标校正，换算因子自动设为 **1**")
+    else:
+        auto_cf = round(final_vol / sample_vol * extra_dil, 6)
+        st.caption(f"💡 无内标校正，换算因子 = {final_vol}/{sample_vol}×{extra_dil} = **{auto_cf}**")
+
+    conversion_factor = st.number_input(
+        "换算因子" + ("（已锁定）" if is_corrected else "（可手动覆盖）"),
+        value=auto_cf,
+        step=0.001,
+        format="%.6f",
+        disabled=is_corrected
+    )
     spike_conc = st.number_input("基质加标浓度 (ppb)", value=10, step=1)
     ss_spike_conc = st.number_input("SS 替代物加标浓度 (ppb)", value=10, step=1, help="替代物自身的理论加标浓度，可能不同于基质加标浓度")
 
