@@ -237,12 +237,17 @@ def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike, ss_spike=None):
         ws.cell(row=2, column=ms_start+i, value='ppb'); sty(ws.cell(row=2,column=ms_start+i), S['hdr'])
     for i in range(n_ms):
         ws.cell(row=2, column=rec_start+i, value='%'); sty(ws.cell(row=2,column=rec_start+i), S['hdr'])
+    for c in [stat_col, sd_col, se_col]:
+        ws.cell(row=2, column=c, value='%'); sty(ws.cell(row=2,column=c), S['hdr'])
 
     rec_cl = get_column_letter(rec_start)
     rec_cr = get_column_letter(rec_start + n_ms - 1)
 
+    # 主列表：跳过 SS 替代物（单独放底部）
+    non_ss_comps = [c for c in all_compounds if not re.match(r'd\d+-', c)]
+
     row = 3
-    for comp in all_compounds:
+    for comp in non_ss_comps:
         ws.cell(row=row, column=1, value=comp); sty(ws.cell(row=row,column=1), S['cmpd'])
         for i, (_, cl, _) in enumerate(ms_cols):
             v = safe_float(raw_data.get(comp, {}).get(cl))
@@ -254,8 +259,7 @@ def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike, ss_spike=None):
             v = safe_float(raw_data.get(comp, {}).get(cl))
             c = ws.cell(row=row, column=rec_start+i)
             if v is not None:
-                the_spike = ss_spike if re.match(r'd\d+-', comp) else spike
-                c.value = round_int((v / the_spike) * 100); c.number_format = '0'
+                c.value = round_int((v / spike) * 100); c.number_format = '0'
             sty(c, S['rec'])
         rr = f'{rec_cl}{row}:{rec_cr}{row}'
         ws.cell(row=row, column=stat_col, value=f'=ROUND(AVERAGE({rr}),0)'); ws.cell(row=row,column=stat_col).number_format = '0'
@@ -266,7 +270,7 @@ def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike, ss_spike=None):
         sty(ws.cell(row=row, column=se_col), S['data'])
         row += 1
 
-    # SS 回收率部分
+    # SS 替代物回收率部分（独立于上方主列表）
     ss_comps = [c for c in all_compounds if re.match(r'd\d+-', c)]
     if ss_comps:
         row += 1
@@ -275,11 +279,13 @@ def build_sheet1(wb, raw_data, ms_cols, all_compounds, S, spike, ss_spike=None):
         row += 1
         for ss in ss_comps:
             ws.cell(row=row, column=1, value=ss); sty(ws.cell(row=row,column=1), S['cmpd'])
+            # MS数据列：照抄原始基质加标浓度（不除以任何值）
             for i, (_, cl, _) in enumerate(ms_cols):
                 v = safe_float(raw_data.get(ss, {}).get(cl))
                 c = ws.cell(row=row, column=ms_start+i)
-                if v is not None: c.value = round6(v / ss_spike); c.number_format = '0.000000'
+                if v is not None: c.value = round6(v); c.number_format = '0.000000'
                 sty(c, S['data'])
+            # 回收率列：SS实测浓度 ÷ SS理论加标浓度 × 100%
             for i, (_, cl, _) in enumerate(ms_cols):
                 v = safe_float(raw_data.get(ss, {}).get(cl))
                 c = ws.cell(row=row, column=rec_start+i)
@@ -389,7 +395,7 @@ def build_sheet3(wb, raw_data, sample_cols, target_compounds, S, mh_unit):
 # ============================================================
 # Sheet 4: 最终计算浓度
 # ============================================================
-def build_sheet4(wb, raw_data, sample_cols, target_compounds, all_compounds, blank_info, S, cf, unit):
+def build_sheet4(wb, raw_data, sample_cols, target_compounds, all_compounds, blank_info, S, cf, unit, sample_vol=2):
     ws = wb.create_sheet('Final. conc 最终计算浓度')
     n_s = len(sample_cols)
     sample_start = 16  # P列
@@ -412,7 +418,7 @@ def build_sheet4(wb, raw_data, sample_cols, target_compounds, all_compounds, bla
     for i, nm in enumerate(stat_names):
         ws.cell(row=2, column=4+i, value=nm); sty(ws.cell(row=2,column=4+i), S['stat'])
     for i in range(n_s):
-        ws.cell(row=2, column=sample_start+i, value=1); sty(ws.cell(row=2,column=sample_start+i), S['data'])
+        ws.cell(row=2, column=sample_start+i, value=sample_vol); sty(ws.cell(row=2,column=sample_start+i), S['data'])
 
     # 合并统计表头 Row1+Row2
     for col in range(4, 4 + len(stat_names)):
@@ -557,7 +563,7 @@ def process(config=None, return_bytes=False):
     build_sheet1(wb, raw_data, mss, all_c, S, spike, ss_spike)
     _, binfo = build_sheet2(wb, raw_data, blanks, all_c, S, cf, unit)
     build_sheet3(wb, raw_data, samps, target, S, mh_unit)
-    build_sheet4(wb, raw_data, samps, target, all_c, binfo, S, cf, unit)
+    build_sheet4(wb, raw_data, samps, target, all_c, binfo, S, cf, unit, cfg.get('sample_volume_ml', 2))
     build_sheet5(wb, samps, target, S)
     build_info(wb, S, cfg, len(target), len(all_c))
 
