@@ -152,10 +152,10 @@ with st.sidebar:
     st.header(t('file_header', L))
     uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx"])
 
-    # Demo 数据按钮
-    use_demo = st.button(t('demo_btn', L), help=t('demo_help', L), use_container_width=True)
-    if use_demo:
-        st.session_state.demo_active = True
+    # Demo 数据加载（暂不可用：GitHub 上传 xlsx 会损坏）
+    # use_demo = st.button(t('demo_btn', L), help=t('demo_help', L), use_container_width=True)
+    # if use_demo:
+    #     st.session_state.demo_active = True
 
     output_name = st.text_input(t('output_name', L), t('output_default', L))
 
@@ -166,25 +166,59 @@ with st.sidebar:
 # 主区域
 # ============================================================
 
-file_bytes = None
-demo_loaded = st.session_state.get('demo_active', False)
+def get_demo_bytes():
+    """生成 Demo 示例数据（内置，无需外部文件）"""
+    import openpyxl as _xl
+    wb = _xl.Workbook()
+    ws = wb.active; ws.title = 'Sheet1'
+    ws.cell(row=1, column=1, value='化合物方法')
+    ws.cell(row=2, column=1, value='名称'); ws.cell(row=2, column=2, value='离子对')
+    hdrs = ['F91-BLANK1','F92-BLANK2','F93-BLANK3','F94-BLANK4','F95-BLANK5','F96-BLANK6',
+            '10PPB','F89-MS1','F90-MS2','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10']
+    for i,h in enumerate(hdrs):
+        ws.cell(row=1, column=3+i, value=h); ws.cell(row=2, column=3+i, value='最终浓度')
+    demo_data = [
+        ('C8-BAC','248.2->91.0', [0.000498,0.019774,0.000505,0.000671,0.000549,0.001351], [0.1741,9.9987], [0.2617,0.2135], [0.000919,0.000893,0.002015,None,0.000692,0.001064,0.000784,0.001488,0.000453,None]),
+        ('C10-BAC','276.3->91.1', [0.001464,0.023144,0.001582,0.003866,0.001540,0.010050], [0.1505,10.0234], [1.3550,0.9567], [0.0257,0.0261,0.0247,None,0.0243,0.0109,0.0200,0.0184,0.0179,0.0057]),
+        ('C12-BAC','304.3->91.0', [0.062243,0.068513,0.053031,0.059037,0.057253,0.152859], [0.4065,10.1234], [1.2908,0.9064], [0.0875,0.0823,0.0912,None,0.0789,0.0680,0.0734,0.0710,0.0663,0.0758]),
+        ('C14-BAC','332.3->91.1', [0.012054,0.020653,0.010276,0.011484,0.010341,0.032861], [0.1965,10.0345], [0.4191,0.3179], [0.0268,0.0241,0.0289,None,0.0217,0.0193,0.0224,0.0208,0.0185,0.0246]),
+        ('C16-BAC','360.4->91.1', [0.009222,0.019469,0.009451,0.007037,0.009124,0.012168], [0.1643,10.0456], [0.1224,0.1248], [0.0156,0.0139,0.0168,None,0.0121,0.0105,0.0118,0.0112,0.0098,0.0134]),
+        ('C18-BAC','388.4->91.0', [0.017903,0.025084,0.017392,0.015902,0.016529,0.035585], [0.1479,10.0678], [0.0635,0.0646], [0.0289,0.0256,0.0312,None,0.0224,0.0198,0.0220,0.0205,0.0183,0.0248]),
+        ('C8-DDAC','270.3->158.2', [0.012746,0.012324,0.010552,0.011981,0.012511,0.015686], [1.9238,10.0890], [1.9238,1.7021], [0.0198,0.0176,0.0215,None,0.0154,0.0137,0.0152,0.0141,0.0126,0.0172]),
+        ('C12-DDAC','382.4->214.0', [0.009503,0.012877,0.009371,0.008498,0.009007,0.016294], [0.4065,10.1112], [0.4065,0.5414], [0.0152,0.0135,0.0165,None,0.0118,0.0104,0.0116,0.0108,0.0096,0.0132]),
+        ('C8-ATMAC','172.2->71.1', [0.013368,0.015907,0.009256,0.011528,0.009870,0.011313], [1.5743,10.1334], [1.5743,1.1097], [0.0168,0.0149,0.0182,None,0.0131,0.0115,0.0128,0.0119,0.0106,0.0146]),
+        ('C12-ATMAC','228.3->71.1', [0.161189,0.250358,0.186107,0.199182,0.182527,0.264367], [1.1791,10.1556], [1.1791,0.9213], [0.2567,0.2289,0.2789,None,0.1998,0.1765,0.1956,0.1823,0.1623,0.2234]),
+        ('C10-BAC+O','292.3->91.1', [0.000629,0.001272,0.000783,0.001354,0.000741,0.003236], [2.0656,10.1778], [1.8895,1.3102], [0.0021,0.0019,0.0023,None,0.0017,0.0015,0.0016,0.0015,0.0013,0.0018]),
+        ('d7-C12-BAC','311.3->98.1', [0.4801,0.4331,0.5060,0.5890,0.4644,1.0049], [0.275,9.988], [1.1597,0.7278], []),
+        ('d9-C10-ATMAC','209.3->71.1', [0.7596,1.5442,1.0103,0.9204,1.1522,2.0779], [0.200,10.001], [1.2243,0.8579], []),
+    ]
+    for row_idx, (name, ion, blanks, qcs, mss, samps) in enumerate(demo_data):
+        r = 3 + row_idx
+        ws.cell(row=r, column=1, value=name); ws.cell(row=r, column=2, value=ion)
+        for j, v in enumerate(blanks):
+            if v is not None: ws.cell(row=r, column=3+j, value=round(v, 6))
+        for j, v in enumerate(mss):
+            if v is not None: ws.cell(row=r, column=10+j, value=round(v, 6))
+        for j, v in enumerate(samps):
+            if v is not None: ws.cell(row=r, column=12+j, value=round(v, 6))
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf.getvalue()
 
-# Demo 数据加载
-if demo_loaded:
-    demo_path = os.path.join(os.path.dirname(__file__), 'demo_urine_qac_masshunter.xlsx')
-    if os.path.exists(demo_path):
-        with open(demo_path, 'rb') as f:
-            file_bytes = f.read()
-        st.info("📥 " + ({'zh':'已加载 Demo 数据，可直接点击处理或替换为自己的文件','en':'Demo data loaded. Click Process or upload your own file'}[L]))
-    else:
-        st.warning("Demo file not found. Please upload your own data.")
-        st.session_state.demo_active = False
+file_bytes = None
+
+# Demo 数据按钮
+with st.sidebar:
+    use_demo = st.button(t('demo_btn', L), help=t('demo_help', L), use_container_width=True)
+if use_demo:
+    st.session_state.demo_active = True
+    file_bytes = get_demo_bytes()
+    st.info("📥 已加载 Demo 示例数据")
 
 if uploaded_file:
     file_bytes = uploaded_file.getvalue()
     st.session_state.demo_active = False
 
-if file_bytes:
+if uploaded_file:
+    file_bytes = uploaded_file.getvalue()
     st.subheader(t('raw_preview', L))
     try:
         raw_data, blanks, mss, samps, target, is_c, ss_c, all_c = read_raw(file_bytes)
@@ -215,7 +249,7 @@ if file_bytes:
 # 处理按钮
 # ============================================================
 st.divider()
-process_btn = st.button(t('process_btn', L), type="primary", disabled=(file_bytes is None), use_container_width=True)
+process_btn = st.button(t('process_btn', L), type="primary", disabled=(uploaded_file is None), use_container_width=True)
 
 if process_btn and file_bytes:
     with st.spinner(t('processing', L)):
