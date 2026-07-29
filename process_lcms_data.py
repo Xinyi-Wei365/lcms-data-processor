@@ -678,81 +678,6 @@ def build_sheet5(wb, sample_cols, S):
 
 
 # ============================================================
-# Concentration summary: one ungrouped, presentation-ready table
-# ============================================================
-def build_concentration_summary(wb, final_sheet, sample_cols, S, cfg):
-    ws = wb.create_sheet('\u6d53\u5ea6\u603b\u8868 \u63cf\u8ff0\u6027\u7edf\u8ba1')
-    final_name = final_sheet.title
-    sample_start = 16  # Column P in Final. conc
-    last_sample = sample_start + len(sample_cols) - 1
-    first_sample_letter = get_column_letter(sample_start)
-    last_sample_letter = get_column_letter(last_sample)
-
-    title = '\u6d53\u5ea6\u603b\u8868\uff08\u4e0d\u5206\u7ec4\uff09\uff1a\u63cf\u8ff0\u6027\u7edf\u8ba1\u4e0e\u68c0\u51fa\u60c5\u51b5'
-    note = ('\u6240\u6709\u6570\u503c\u4fdd\u75593\u4f4d\u6709\u6548\u6570\u5b57\uff1b\u68c0\u51fa\u7387 >50% \u65f6\u663e\u793a\u7edf\u8ba1\u91cf\uff0c'
-            '\u5426\u5219\u663e\u793a NC\u3002\u6240\u6709\u6570\u503c\u4fdd\u7559\u516c\u5f0f\uff0c\u53ef\u76f4\u63a5\u590d\u5236\u7528\u4e8e\u4f5c\u56fe\u6216\u8bba\u6587\u3002')
-    headers = [
-        '\u5316\u5408\u7269', '\u6837\u54c1\u603b\u6570', '\u68c0\u51fa\u6570', '\u68c0\u51fa\u7387',
-        '\u7b97\u672f\u5e73\u5747\u503c', '\u51e0\u4f55\u5e73\u5747\u503c', '\u4e2d\u4f4d\u6570', 'P25 (Q1)', 'P75 (Q3)',
-        '\u6700\u5c0f\u503c', '\u6700\u5927\u503c', 'P5', 'P95', 'MDL', '1/2 MDL', '\u5355\u4f4d'
-    ]
-
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-    ws.cell(row=1, column=1, value=title)
-    sty(ws.cell(row=1, column=1), S['hdr'])
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(headers))
-    ws.cell(row=2, column=1, value=note)
-    sty(ws.cell(row=2, column=1), S['yell'])
-
-    for col, header in enumerate(headers, 1):
-        ws.cell(row=3, column=col, value=header)
-        sty(ws.cell(row=3, column=col), S['hdr'])
-
-    def sig3(ref):
-        # Formula keeps three significant figures across both low and high concentrations.
-        return f'IFERROR(ROUND({ref},3-1-INT(LOG10(ABS({ref})))),0)'
-
-    def sig3_if_detected(ref, final_row):
-        return f'=IF(\'{final_name}\'!$D{final_row}>50%,{sig3(ref)},"NC")'
-
-    for index, compound in enumerate(TARGET_COMPS):
-        row = 4 + index
-        final_row = 4 + index
-        sample_range = f"'{final_name}'!{first_sample_letter}{final_row}:{last_sample_letter}{final_row}"
-        ws.cell(row=row, column=1, value=compound)
-        sty(ws.cell(row=row, column=1), S['cmpd'])
-
-        formulas = {
-            2: f'=COLUMNS({sample_range})',
-            3: f'=COUNT({sample_range})',
-            4: f'=IFERROR(C{row}/B{row},0)',
-            5: sig3_if_detected(f"'{final_name}'!$E{final_row}", final_row),
-            6: sig3_if_detected(f"'{final_name}'!$F{final_row}", final_row),
-            7: sig3_if_detected(f"'{final_name}'!$G{final_row}", final_row),
-            8: sig3_if_detected(f"'{final_name}'!$K{final_row}", final_row),
-            9: sig3_if_detected(f"'{final_name}'!$L{final_row}", final_row),
-            10: sig3_if_detected(f"'{final_name}'!$H{final_row}", final_row),
-            11: sig3_if_detected(f"'{final_name}'!$I{final_row}", final_row),
-            12: sig3_if_detected(f"'{final_name}'!$J{final_row}", final_row),
-            13: sig3_if_detected(f"'{final_name}'!$M{final_row}", final_row),
-            14: f'={sig3(f"\'{final_name}\'!$C{final_row}")}',
-            15: f'={sig3(f"N{row}/2")}',
-            16: f"='{final_name}'!$E$3",
-        }
-        for col, formula in formulas.items():
-            cell = ws.cell(row=row, column=col, value=formula)
-            cell.number_format = '0.000E+00' if col not in (2, 3, 4, 16) else ('0' if col in (2, 3) else ('0.0%' if col == 4 else '@'))
-            sty(cell, S['stat'] if col in range(2, 16) else S['data'])
-
-    widths = [30, 12, 10, 12, 16, 16, 14, 13, 13, 14, 14, 13, 13, 13, 13, 12]
-    for col, width in enumerate(widths, 1):
-        ws.column_dimensions[get_column_letter(col)].width = width
-    ws.freeze_panes = 'A4'
-    ws.auto_filter.ref = f'A3:P{3 + len(TARGET_COMPS)}'
-    return ws
-
-
-# ============================================================
 # 说明书
 # ============================================================
 def build_info_sheet(wb, S, cfg):
@@ -825,15 +750,12 @@ def process(config=None, return_bytes=False):
     _, s3_first = build_sheet3(wb, raw_data, samps, S, cfg)
 
     print("[4/6] Final conc...")
-    final_sheet = build_sheet4(wb, raw_data, samps, binfo, s3_first, S, cfg)
+    build_sheet4(wb, raw_data, samps, binfo, s3_first, S, cfg)
 
     print("[5/6] Stats helper...")
     build_sheet5(wb, samps, S)
 
-    print("[6/7] Concentration summary...")
-    build_concentration_summary(wb, final_sheet, samps, S, cfg)
-
-    print("[7/7] Info sheet...")
+    print("[6/6] Info sheet...")
     build_info_sheet(wb, S, cfg)
 
     if return_bytes:
