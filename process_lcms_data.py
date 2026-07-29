@@ -741,7 +741,7 @@ def build_concentration_summary(wb, final_sheet, sample_cols, S, cfg):
         }
         for col, formula in formulas.items():
             cell = ws.cell(row=row, column=col, value=formula)
-            cell.number_format = '0.00E+00' if col not in (2, 3, 4, 16) else ('0' if col in (2, 3) else ('0.0%' if col == 4 else '@'))
+            cell.number_format = '0.000E+00' if col not in (2, 3, 4, 16) else ('0' if col in (2, 3) else ('0.0%' if col == 4 else '@'))
             sty(cell, S['stat'] if col in range(2, 16) else S['data'])
 
     widths = [30, 12, 10, 12, 16, 16, 14, 13, 13, 14, 14, 13, 13, 13, 13, 12]
@@ -771,7 +771,6 @@ def build_info_sheet(wb, S, cfg):
         ['Sheet4 R~DA','IF(瓶内值>空白平均,(瓶内值-空白平均)×$B$38, 1/2MDL×$B$38)','Sheet2/Sheet3','$B$38=换算因子'],
         ['Sheet4 DF','COUNT/COLUMNS 公式','Sheet4 样品列',''],
         ['Sheet4 统计','IF(DF>50%,统计函数,"NC")','Sheet4','空值自动忽略'],
-        ['浓度总表','不分组描述性统计；3位有效数字','Final. conc 最终计算浓度','检出率、均值、中位数、分位数、范围、MDL和1/2 MDL均保留公式'],
         ['换算因子位置','Sheet2 $A$1 + Sheet4 $B$38','','两处均可独立修改'],
         ['本次参数',f'样本:{cfg["sample_type"]} 取样:{cfg["sample_volume_ml"]}mL 定容:{cfg["final_volume_ml"]}mL 换算因子:{cfg["conversion_factor"]}','',''],
     ]
