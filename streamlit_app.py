@@ -203,22 +203,26 @@ def get_demo_bytes():
             if v is not None: ws.cell(row=r, column=12+j, value=round(v, 6))
     buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf.getvalue()
 
-file_bytes = None
-
-# Demo 数据按钮
+demo_path = os.path.join(os.path.dirname(__file__), 'demo_urine_qac_masshunter.xlsx')
 with st.sidebar:
     use_demo = st.button(t('demo_btn', L), help=t('demo_help', L), use_container_width=True)
-if use_demo:
-    st.session_state.demo_active = True
-    file_bytes = get_demo_bytes()
-    st.info("📥 已加载 Demo 示例数据")
 
+if use_demo:
+    if os.path.exists(demo_path):
+        with open(demo_path, 'rb') as demo_file:
+            st.session_state.demo_bytes = demo_file.read()
+        st.session_state.demo_active = True
+    else:
+        st.error('Demo file not found. Please upload your own file.')
+
+file_bytes = st.session_state.get('demo_bytes') if st.session_state.get('demo_active') else None
 if uploaded_file:
     file_bytes = uploaded_file.getvalue()
     st.session_state.demo_active = False
+    st.session_state.pop('demo_bytes', None)
 
-if uploaded_file:
-    file_bytes = uploaded_file.getvalue()
+if st.session_state.get('demo_active') and file_bytes:
+    st.info('Demo data loaded. You can now click Start Processing.')
 
 if file_bytes:
     st.subheader(t('raw_preview', L))
