@@ -43,6 +43,8 @@ T = {
     'output_name':          {'zh': '输出文件名',                                  'en': 'Output Filename'},
     'output_default':       {'zh': '已处理数据.xlsx',                             'en': 'processed_data.xlsx'},
     'tip':                  {'zh': '上传文件 → 调参数 → 点处理 → 下载结果',        'en': 'Upload → Adjust Params → Process → Download'},
+    'demo_btn':             {'zh': '📥 加载 Demo 数据',                           'en': '📥 Load Demo Data'},
+    'demo_help':            {'zh': '使用示例数据体验平台功能，无需上传自己的文件',    'en': 'Try the platform with example data, no upload needed'},
     'raw_preview':          {'zh': '📊 原始数据预览',                             'en': '📊 Raw Data Preview'},
     'total_cmpd':           {'zh': '化合物总数',                                  'en': 'Total Compounds'},
     'target_cmpd':          {'zh': '目标化合物',                                  'en': 'Target Compounds'},
@@ -139,11 +141,22 @@ with st.sidebar:
         disabled=is_corrected
     )
     spike_conc = st.number_input(t('spike_conc', L), value=10, step=1)
-    ss_spike_conc = st.number_input(t('ss_spike_conc', L), value=10, step=1, help=t('ss_spike_help', L))
+    st.caption('SS 替代物理论加标浓度（分别设置）：')
+    col_ss1, col_ss2 = st.columns(2)
+    with col_ss1:
+        ss_spike_d7 = st.number_input('d7-C12-BAC (ppb)', value=4, step=1)
+    with col_ss2:
+        ss_spike_d9 = st.number_input('d9-C10-ATMAC (ppb)', value=4, step=1)
 
     st.divider()
     st.header(t('file_header', L))
     uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx"])
+
+    # Demo 数据按钮
+    use_demo = st.button(t('demo_btn', L), help=t('demo_help', L), use_container_width=True)
+    if use_demo:
+        st.session_state.demo_active = True
+
     output_name = st.text_input(t('output_name', L), t('output_default', L))
 
     st.divider()
@@ -154,9 +167,24 @@ with st.sidebar:
 # ============================================================
 
 file_bytes = None
+demo_loaded = st.session_state.get('demo_active', False)
+
+# Demo 数据加载
+if demo_loaded:
+    demo_path = os.path.join(os.path.dirname(__file__), 'demo_urine_qac_masshunter.xlsx')
+    if os.path.exists(demo_path):
+        with open(demo_path, 'rb') as f:
+            file_bytes = f.read()
+        st.info("📥 " + ({'zh':'已加载 Demo 数据，可直接点击处理或替换为自己的文件','en':'Demo data loaded. Click Process or upload your own file'}[L]))
+    else:
+        st.warning("Demo file not found. Please upload your own data.")
+        st.session_state.demo_active = False
+
 if uploaded_file:
     file_bytes = uploaded_file.getvalue()
+    st.session_state.demo_active = False
 
+if file_bytes:
     st.subheader(t('raw_preview', L))
     try:
         raw_data, blanks, mss, samps, target, is_c, ss_c, all_c = read_raw(file_bytes)
@@ -187,7 +215,7 @@ if uploaded_file:
 # 处理按钮
 # ============================================================
 st.divider()
-process_btn = st.button(t('process_btn', L), type="primary", disabled=(uploaded_file is None), use_container_width=True)
+process_btn = st.button(t('process_btn', L), type="primary", disabled=(file_bytes is None), use_container_width=True)
 
 if process_btn and file_bytes:
     with st.spinner(t('processing', L)):
@@ -199,7 +227,8 @@ if process_btn and file_bytes:
             'extra_dilution': int(extra_dil),
             'conversion_factor': float(conversion_factor),
             'spike_conc_ppb': int(spike_conc),
-            'ss_spike_conc_ppb': int(ss_spike_conc),
+            'ss_spike_d7_ppb': int(ss_spike_d7),
+            'ss_spike_d9_ppb': int(ss_spike_d9),
             'masshunter_unit': 'ppb',
             'output_unit': output_unit,
             'blank_handling': 'ND',
