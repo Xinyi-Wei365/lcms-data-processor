@@ -19,6 +19,7 @@ import io
 import csv
 import os
 import codecs
+import pandas as pd
 
 # ============================================================
 # 可配置参数
@@ -469,10 +470,20 @@ def read_raw(filepath_or_bytes):
     if isinstance(filepath_or_bytes, (bytes, bytearray)):
         raw_bytes = bytes(filepath_or_bytes)
         if not raw_bytes.startswith(b'PK'):
+            if raw_bytes.startswith(b'\xd0\xcf\x11\xe0'):
+                frame = pd.read_excel(io.BytesIO(raw_bytes), header=None, engine='xlrd')
+                rows = frame.where(pd.notna(frame), None).values.tolist()
+                header, body, compound_col, data_start = _normalise_rows(rows)
+                return _parse_tabular_rows(header, body, compound_col, data_start)
             return _read_csv_source(raw_bytes)
     if isinstance(filepath_or_bytes, bytes):
         wb = openpyxl.load_workbook(io.BytesIO(filepath_or_bytes), data_only=True)
     else:
+        if os.fspath(filepath_or_bytes).lower().endswith('.xls'):
+            frame = pd.read_excel(filepath_or_bytes, header=None, engine='xlrd')
+            rows = frame.where(pd.notna(frame), None).values.tolist()
+            header, body, compound_col, data_start = _normalise_rows(rows)
+            return _parse_tabular_rows(header, body, compound_col, data_start)
         wb = openpyxl.load_workbook(filepath_or_bytes, data_only=True)
     ws = next((candidate for candidate in wb.worksheets
                if any(_looks_like_header_row(list(row))
@@ -1196,6 +1207,24 @@ def build_info_sheet(wb, S, cfg):
     return ws
 
 
+def export_csv_bytes(raw_data, blank_cols, sample_cols, cfg):
+    """Create a formula-free CSV containing summary and final concentrations."""
+    preview_cfg = dict(cfg)
+    preview_cfg['_raw_data'] = raw_data
+    rows = [['Name', 'Chain length', 'DF (%)', 'Median (Q1-Q3)', 'MDL', 'MQL']]
+    for item in compute_preview_summary(raw_data, blank_cols, sample_cols, preview_cfg):
+        rows.append([item.get('名称') or item.get('鍚嶇О'), item.get('链长') or item.get('閾鹃暱'), item.get('DF (%)'), item.get('Median (Q1-Q3)'), item.get('MDL'), item.get('MQL')])
+    sample_headers = [header for _, _, header in sample_cols]
+    rows.append([])
+    rows.append(['Final concentration summary'] + sample_headers)
+    for item in compute_preview_final_table(raw_data, blank_cols, sample_cols, preview_cfg):
+        name = item.get('名称') or item.get('鍚嶇О')
+        rows.append([name] + [item.get(header) for header in sample_headers])
+    text = io.StringIO()
+    csv.writer(text, lineterminator='\n').writerows(rows)
+    return text.getvalue().encode('utf-8-sig')
+
+
 # ============================================================
 # 主处理函数 (可被 Streamlit 调用)
 # ============================================================
@@ -1259,8 +1288,11 @@ def process(config=None, return_bytes=False):
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
+        xlsx_bytes = output.getvalue()
         wb.close()
-        return output.getvalue(), cfg.get('output_file', 'processed_data.xlsx')
+        if cfg.get('output_format', 'xlsx').lower() == 'csv':
+            return export_csv_bytes(raw_data, blanks, samps, cfg), cfg.get('output_file', 'processed_data.csv').replace('.xlsx', '.csv')
+        return xlsx_bytes, cfg.get('output_file', 'processed_data.xlsx')
     else:
         out = cfg['output_file']
         print(f"Saving to: {out}")

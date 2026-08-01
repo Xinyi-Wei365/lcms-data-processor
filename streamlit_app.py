@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 LC-MS/MS 数据处理智能体 — Streamlit 可视化界面
@@ -86,6 +86,22 @@ T = {
     'upload_label':         {'zh': '上传原始数据（XLSX 或 CSV）',                  'en': 'Upload Raw Data (XLSX or CSV)'},
     'output_name':          {'zh': '输出文件名',                                  'en': 'Output Filename'},
     'output_default':       {'zh': '已处理数据.xlsx',                             'en': 'processed_data.xlsx'},
+    'output_format':        {'zh': '输出格式',                                    'en': 'Output Format'},
+    'roles_header':         {'zh': '化合物角色设置',                              'en': 'Compound Roles'},
+    'roles_caption':        {'zh': '系统按名称预识别；请确认哪些为 IS、SS。未选为 IS/SS 的化合物将作为目标物。', 'en': 'Roles are auto-detected by name; confirm IS and SS. Unselected compounds remain targets.'},
+    'is_select':            {'zh': 'IS 内标（可多选）',                            'en': 'IS internal standards'},
+    'ss_select':            {'zh': 'SS 替代物（可多选）',                          'en': 'SS surrogates'},
+    'blank_zero_header':    {'zh': 'blank=0 的 MDL 设置',                        'en': 'Blank-zero MDL settings'},
+    'ss_spike_caption':     {'zh': 'SS 替代物理论加标浓度（分别设置）：',              'en': 'SS theoretical spike concentrations (set separately):'},
+    'ss_spike_grid':        {'zh': 'SS 各自理论加标浓度（ppb）',                      'en': 'SS theoretical spike concentrations (ppb)'},
+    'blank_zero_select':    {'zh': '选择 blank=0 的化合物',                         'en': 'Select blank=0 compounds'},
+    'blank_zero_help':      {'zh': '对每个所选化合物输入标曲浓度和对应 S/N：MDL = 3 × 标曲浓度 ÷ S/N。', 'en': 'Enter calibration concentration and S/N for each selected compound: MDL = 3 × calibration concentration ÷ S/N.'},
+    'calibration':          {'zh': '标曲浓度 (ppb)',                              'en': 'Calibration concentration (ppb)'},
+    'sn':                   {'zh': 'S/N',                                         'en': 'S/N'},
+    'mql_help':             {'zh': '默认 3.333333；请按实验室方法确认。',              'en': 'Default 3.333333; confirm with your laboratory method.'},
+    'preview_stats':        {'zh': '描述性统计（在线数值预览）',                     'en': 'Descriptive statistics (numeric preview)'},
+    'preview_stats_help':   {'zh': '这里显示已计算的数值；下载的 Excel 同时保留可审计公式。', 'en': 'Calculated values are shown here; downloaded Excel retains auditable formulas.'},
+    'preview_final':        {'zh': '最终浓度（在线数值预览）',                       'en': 'Final concentrations (numeric preview)'},
     'tip':                  {'zh': '上传文件 → 调参数 → 点处理 → 下载结果',        'en': 'Upload → Adjust Params → Process → Download'},
     'demo_btn':             {'zh': '📥 加载 Demo 数据',                           'en': '📥 Load Demo Data'},
     'demo_help':            {'zh': '使用示例数据体验平台功能，无需上传自己的文件',    'en': 'Try the platform with example data, no upload needed'},
@@ -185,7 +201,7 @@ with st.sidebar:
         disabled=is_corrected
     )
     spike_conc = st.number_input(t('spike_conc', L), value=10, step=1)
-    st.caption('SS 替代物理论加标浓度（分别设置）：')
+    st.caption(t('ss_spike_caption', L))
     col_ss1, col_ss2 = st.columns(2)
     with col_ss1:
         ss_spike_d7 = st.number_input('d7-C12-BAC (ppb)', value=4, step=1)
@@ -197,6 +213,7 @@ with st.sidebar:
     uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx", "xls", "csv", "tsv"])
 
     output_name = st.text_input(t('output_name', L), t('output_default', L))
+    output_format = st.selectbox(t('output_format', L), ['XLSX', 'CSV'])
 
     st.divider()
     st.caption(t('tip', L))
@@ -301,15 +318,15 @@ if file_bytes:
         col2.metric(t('ms_cols', L), len(mss))
         col3.metric(t('sample_cols', L), len(samps))
 
-        st.subheader('化合物角色设置')
-        st.caption('系统按名称预识别；请确认哪些为 IS、SS。未选为 IS/SS 的化合物将作为目标物。')
-        selected_is = st.multiselect('IS 内标（可多选）', all_c, default=is_c)
-        selected_ss = st.multiselect('SS 替代物（可多选）', all_c, default=ss_c)
+        st.subheader(t('roles_header', L))
+        st.caption(t('roles_caption', L))
+        selected_is = st.multiselect(t('is_select', L), all_c, default=is_c)
+        selected_ss = st.multiselect(t('ss_select', L), all_c, default=ss_c)
         overlap = set(selected_is) & set(selected_ss)
         if overlap:
             st.error(f'同一化合物不能同时作为 IS 与 SS：{sorted(overlap)}')
         if selected_ss:
-            st.write('SS 各自理论加标浓度（ppb）')
+            st.write(t('ss_spike_grid', L))
             ss_grid = st.columns(min(3, len(selected_ss)))
             for i, name in enumerate(selected_ss):
                 with ss_grid[i % len(ss_grid)]:
@@ -317,23 +334,23 @@ if file_bytes:
                         name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
                     )
 
-        with st.expander('blank=0 的 MDL 设置'):
+        with st.expander(t('blank_zero_header', L)):
             detected_blank_zero = detect_blank_zero_compounds(raw_data, blanks)
             blank_zero_compounds = st.multiselect(
-                '选择 blank=0 的化合物', all_c,
+                t('blank_zero_select', L), all_c,
                 default=[name for name in detected_blank_zero if name in all_c],
             )
             if blank_zero_compounds:
-                st.caption('对每个所选化合物输入标曲浓度和对应 S/N：MDL = 3 × 标曲浓度 ÷ S/N。')
+                st.caption(t('blank_zero_help', L))
                 mdl_cols = st.columns(min(3, len(blank_zero_compounds)))
                 for i, name in enumerate(blank_zero_compounds):
                     with mdl_cols[i % len(mdl_cols)]:
                         calibration = st.number_input(
-                            f'{name} 标曲浓度 (ppb)', min_value=0.0, value=0.0,
+                            f'{name} {t("calibration", L)}', min_value=0.0, value=0.0,
                             step=0.1, key=f'mdl_cal_{name}'
                         )
                         sn = st.number_input(
-                            f'{name} S/N', min_value=0.0, value=0.0,
+                            f'{name} {t("sn", L)}', min_value=0.0, value=0.0,
                             step=1.0, key=f'mdl_sn_{name}'
                         )
                         mdl_overrides[name] = {
@@ -344,7 +361,7 @@ if file_bytes:
 
         mql_factor = st.number_input(
             'MQL / MDL 倍数', min_value=0.000001, value=3.333333,
-            step=0.1, format='%.6f', help='默认 3.333333；请按实验室方法确认。'
+            step=0.1, format='%.6f', help=t('mql_help', L)
         )
 
     except Exception as e:
@@ -378,6 +395,7 @@ if process_btn and file_bytes:
             'blank_handling': 'ND',
             'input_file': '',
             'output_file': output_name,
+            'output_format': output_format.lower(),
             'input_bytes': file_bytes,
         }
 
@@ -390,13 +408,13 @@ if process_btn and file_bytes:
             preview_cfg = {**config, 'target_compounds': roles['target_compounds']}
             preview_rows = compute_preview_summary(raw_data, blanks, samps, preview_cfg)
             if preview_rows:
-                st.subheader('描述性统计（在线数值预览）')
-                st.caption('这里显示已计算的数值；下载的 Excel 同时保留可审计公式。')
+                st.subheader(t('preview_stats', L))
+                st.caption(t('preview_stats_help', L))
                 st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
 
             final_preview_rows = compute_preview_final_table(raw_data, blanks, samps, preview_cfg)
             if final_preview_rows:
-                st.subheader('最终浓度（在线数值预览）')
+                st.subheader(t('preview_final', L))
                 st.dataframe(pd.DataFrame(final_preview_rows), use_container_width=True)
 
             st.subheader(t('result_preview', L))
@@ -434,7 +452,7 @@ if process_btn and file_bytes:
                 label=t('download_btn', L),
                 data=output_bytes,
                 file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                mime=("text/csv" if output_format == 'CSV' else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
                 use_container_width=True,
                 type="primary",
             )
