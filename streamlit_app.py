@@ -418,34 +418,22 @@ if process_btn and file_bytes:
                 st.dataframe(pd.DataFrame(final_preview_rows), use_container_width=True)
 
             st.subheader(t('result_preview', L))
-            import openpyxl
-            wb = openpyxl.load_workbook(io.BytesIO(output_bytes), data_only=False)
-            tabs = st.tabs([f"{i+1}. {n}" for i, n in enumerate(wb.sheetnames)])
-
-            for tab, name in zip(tabs, wb.sheetnames):
-                with tab:
-                    ws = wb[name]
-                    preview_data = []
-                    for r in ws.iter_rows(min_row=1, max_row=min(12, ws.max_row), max_col=min(12, ws.max_column), values_only=True):
-                        preview_data.append(list(r))
-                    if preview_data:
-                        df_preview = pd.DataFrame(preview_data)
-                        if len(preview_data) > 1:
-                            cols = []
-                            seen = {}
-                            for v in df_preview.iloc[0]:
-                                s = str(v) if v is not None else ''
-                                if s in seen:
-                                    seen[s] += 1
-                                    cols.append(f'{s}_{seen[s]}')
-                                else:
-                                    seen[s] = 0
-                                    cols.append(s)
-                            df_preview.columns = cols
-                            df_preview = df_preview.iloc[1:]
-                        st.dataframe(df_preview, use_container_width=True)
-                    st.caption(f"{ws.max_row}{t('rows_cols', L)}{ws.max_column}{t('rows_cols_suffix', L)}")
-            wb.close()
+            if output_format == 'CSV':
+                # CSV is a flat, formula-free report; preview the actual exported values.
+                # The summary and final-concentration sections have different widths,
+                # so read rows directly and pad them before displaying the table.
+                import csv
+                csv_rows = list(csv.reader(io.StringIO(output_bytes.decode('utf-8-sig'))))
+                width = max((len(row) for row in csv_rows), default=0)
+                csv_preview = pd.DataFrame([row + [''] * (width - len(row)) for row in csv_rows])
+                st.dataframe(csv_preview, use_container_width=True)
+            else:
+                # openpyxl cannot calculate formulas. Show the numerically evaluated
+                # previews above instead of exposing formula strings in the result view.
+                st.info(t('preview_stats_help', L))
+                st.caption('Excel 下载文件保留可审计公式；在线预览显示按同一规则计算的数值。')
+                st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
+                st.dataframe(pd.DataFrame(final_preview_rows), use_container_width=True)
 
             st.divider()
             st.download_button(
