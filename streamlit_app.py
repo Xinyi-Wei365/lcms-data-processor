@@ -71,6 +71,10 @@ T = {
     'is_opts':              {'zh': ['✅ 是，有内标校正','❌ 否，无内标校正'],       'en': ['✅ Yes, IS Corrected','❌ No, Raw Concentration']},
     'is_help':              {'zh': '内标校正后，导出值已是原始样本浓度；无内标校正则需要手动换算',
                              'en': 'With IS correction, exported values are already original sample concentration; without IS correction, manual conversion is needed'},
+    'is_mode':              {'zh': 'IS 校正模式', 'en': 'IS correction mode'},
+    'is_mode_opts':         {'zh': ['MassHunter 已完成 IS 校正（推荐）', '手动响应比校正'], 'en': ['MassHunter IS-corrected (recommended)', 'Manual response-ratio correction']},
+    'is_response_help':     {'zh': '只有原始文件包含目标物/IS 响应比或已知校正因子时才能使用；仅有浓度值不能反推响应比。', 'en': 'Use only when explicit target/IS response factors are available; concentration-only exports cannot reconstruct a response ratio.'},
+    'csv_note':             {'zh': 'CSV 是单页、无公式数值报告；需要多工作表和可审计公式时请选择 XLSX。', 'en': 'CSV is a flat, formula-free report; choose XLSX for multi-sheet formulas.'},
     'cf_caption_yes':       {'zh': '💡 有内标校正，仪器已自动将进样瓶浓度换算为原始尿液浓度，换算因子 = 1',
                              'en': '💡 IS corrected: instrument has already converted vial concentration to original sample concentration. CF = 1'},
     'cf_caption_no':        {'zh': '💡 无内标校正，导出值是进样瓶浓度，换算因子用于将其换算为原始尿液浓度：定容体积 ÷ 取样量 × 稀释倍数',
@@ -184,6 +188,8 @@ with st.sidebar:
         help=t('is_help', L)
     )
     is_corrected = use_is.startswith("✅")
+    is_mode_label = st.selectbox(t('is_mode', L), t('is_mode_opts', L), index=0, help=t('is_response_help', L))
+    is_mode = 'response_ratio' if is_mode_label == t('is_mode_opts', L)[1] else 'masshunter'
 
     if is_corrected:
         auto_cf = 1.0
@@ -214,6 +220,7 @@ with st.sidebar:
 
     output_name = st.text_input(t('output_name', L), t('output_default', L))
     output_format = st.selectbox(t('output_format', L), ['XLSX', 'CSV'])
+    st.caption(t('csv_note', L))
 
     st.divider()
     st.caption(t('tip', L))
@@ -244,6 +251,7 @@ def get_demo_bytes():
         ('C12-DDAC','382.4->214.0', [0.009503,0.012877,0.009371,0.008498,0.009007,0.016294], [0.4065,10.1112], [0.4065,0.5414], [0.0152,0.0135,0.0165,None,0.0118,0.0104,0.0116,0.0108,0.0096,0.0132]),
         ('C8-ATMAC','172.2->71.1', [0.013368,0.015907,0.009256,0.011528,0.009870,0.011313], [1.5743,10.1334], [1.5743,1.1097], [0.0168,0.0149,0.0182,None,0.0131,0.0115,0.0128,0.0119,0.0106,0.0146]),
         ('C12-ATMAC','228.3->71.1', [0.161189,0.250358,0.186107,0.199182,0.182527,0.264367], [1.1791,10.1556], [1.1791,0.9213], [0.2567,0.2289,0.2789,None,0.1998,0.1765,0.1956,0.1823,0.1623,0.2234]),
+        ('C8-PFAS','499.0->80.0', [0.001,0.002,0.001,0.002,0.001,0.002], [0.0,10.0], [0.0,0.0], [0.02,0.03,None,0.01,0.04,0.02,0.01,0.03,0.02,0.01]),
         ('C10-BAC+O','292.3->91.1', [0.000629,0.001272,0.000783,0.001354,0.000741,0.003236], [2.0656,10.1778], [1.8895,1.3102], [0.0021,0.0019,0.0023,None,0.0017,0.0015,0.0016,0.0015,0.0013,0.0018]),
         ('d7-C12-BAC','311.3->98.1', [0.4801,0.4331,0.5060,0.5890,0.4644,1.0049], [0.275,9.988], [1.1597,0.7278], []),
         ('d9-C10-ATMAC','209.3->71.1', [0.7596,1.5442,1.0103,0.9204,1.1522,2.0779], [0.200,10.001], [1.2243,0.8579], []),
@@ -283,6 +291,7 @@ if st.session_state.get('demo_active') and file_bytes:
 selected_is = []
 selected_ss = []
 ss_concentrations = {}
+response_factors = {}
 mdl_overrides = {}
 mql_factor = 3.333333
 
@@ -332,6 +341,18 @@ if file_bytes:
                 with ss_grid[i % len(ss_grid)]:
                     ss_concentrations[name] = st.number_input(
                         name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
+                    )
+
+        response_factors = {}
+        if is_mode == 'response_ratio':
+            st.caption(t('is_response_help', L))
+            factor_targets = [name for name in all_c if name not in selected_is and name not in selected_ss]
+            factor_grid = st.columns(min(3, max(1, len(factor_targets))))
+            for i, name in enumerate(factor_targets):
+                with factor_grid[i % len(factor_grid)]:
+                    response_factors[name] = st.number_input(
+                        f'{name} factor', min_value=0.000001, value=1.0, step=0.01,
+                        key=f'is_factor_{name}'
                     )
 
         with st.expander(t('blank_zero_header', L)):
@@ -387,6 +408,8 @@ if process_btn and file_bytes:
             'ss_spike_d9_ppb': int(ss_spike_d9),
             'is_compounds': selected_is,
             'ss_compounds': selected_ss,
+            'is_correction_mode': is_mode,
+            'is_response_factors': response_factors,
             'ss_spike_concentrations': ss_concentrations,
             'mdl_overrides': mdl_overrides,
             'mql_factor': float(mql_factor),

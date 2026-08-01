@@ -43,6 +43,14 @@ class SummarySheetTests(unittest.TestCase):
         self.assertIn('不受 DF', str(ws['A2'].value))
         self.assertEqual(ws['B4'].value, 'C8')
 
+    def test_legacy_final_statistics_are_not_gated_by_df(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'demo_urine_qac_masshunter.xlsx'), 'rb') as source:
+            raw = source.read()
+        output, _ = processor.process({'input_bytes': raw, 'input_file': '', 'output_file': 'final.xlsx'}, return_bytes=True)
+        wb = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        ws = wb[next(s for s in wb.sheetnames if s.startswith('Final. conc'))]
+        self.assertNotIn('>50%', str(ws['E4'].value))
+
 
 if __name__ == '__main__':
     unittest.main()
