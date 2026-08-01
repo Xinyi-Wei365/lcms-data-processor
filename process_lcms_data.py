@@ -16,6 +16,9 @@ import statistics
 import math
 import re
 import io
+import csv
+import os
+import codecs
 
 # ============================================================
 # 可配置参数
@@ -50,7 +53,7 @@ YELLOW_BG = 'FFFF00'
 # 化合物分组（按输出顺序）
 # ============================================================
 BAC_SERIES   = ['C8-BAC','C10-BAC','C12-BAC','C14-BAC','C16-BAC','C18-BAC']
-DDAC_SERIES  = ['C8-DDAC','C8-10-DDAC','C10-DDAC','C12-DDAC','C14-DDAC','C16-DDAC','C18-DDAC']
+DDAC_SERIES  = ['C8-DADMAC','C8-10-DADMAC','C10-DADMAC','C12-DADMAC','C14-DADMAC','C16-DADMAC','C18-DADMAC']
 ATMAC_SERIES = ['C8-ATMAC','C10-ATMAC','C12-ATMAC','C14-ATMAC','C16-ATMAC','C18-ATMAC']
 BAC_COOH     = ['C10-BAC+2O-2H','C12-BAC+2O-2H','C14-BAC+2O-2H']
 BAC_OH       = ['C10-BAC+O','C12-BAC+O','C14-BAC+O']
@@ -69,6 +72,12 @@ def safe_float(v):
     try: return float(v)
     except: return None
 
+
+def normalize_analyte_name(name):
+    """Normalize the requested DDAC display spelling to DADMAC."""
+    original = str(name or '').strip()
+    return re.sub(r'(?i)(?<![A-Z])DDAC(?![A-Z])', 'DADMAC', original)
+
 def round6(v):
     if v is None: return None
     return round(float(v), 6)
@@ -76,6 +85,343 @@ def round6(v):
 def round_int(v):
     if v is None: return None
     return round(float(v))
+
+
+def extract_chain_length(name):
+    """Return the first C-number chain label without changing the analyte name."""
+    match = re.search(r'(?<![A-Za-z])C(\d+)(?!\d)', str(name or ''), flags=re.I)
+    return f'C{match.group(1)}' if match else None
+
+
+def analyte_metadata(name):
+    """Return display-safe metadata while preserving the original analyte name."""
+    original = normalize_analyte_name(name)
+    upper = original.upper()
+    if 'ATMAC' in upper:
+        analyte_type = 'ATMAC'
+    elif 'DADMAC' in upper:
+        analyte_type = 'DADMAC'
+    elif 'BAC' in upper:
+        analyte_type = 'BAC'
+    else:
+        analyte_type = 'Other'
+    return {'name': original, 'type': analyte_type, 'chain_length': extract_chain_length(original)}
+
+
+def resolve_roles(compounds, is_compounds=None, ss_compounds=None):
+    """Resolve roles from the detected list; unselected compounds remain targets."""
+    all_compounds = list(dict.fromkeys(normalize_analyte_name(value) for value in compounds if str(value).strip()))
+    is_set = {normalize_analyte_name(value) for value in (is_compounds or [])}
+    ss_set = {normalize_analyte_name(value) for value in (ss_compounds or [])}
+    overlap = is_set & ss_set
+    if overlap:
+        raise ValueError(f'An analyte cannot be both IS and SS: {sorted(overlap)}')
+    is_list = [name for name in all_compounds if name in is_set]
+    ss_list = [name for name in all_compounds if name in ss_set]
+    targets = [name for name in all_compounds if name not in is_set and name not in ss_set]
+    return {'target_compounds': targets, 'is_compounds': is_list, 'ss_compounds': ss_list}
+
+
+def configured_compound_lists(cfg, detected_compounds, detected_is=None, detected_ss=None):
+    """Return target/IS/SS lists using user selections with detected-role defaults."""
+    roles = resolve_roles(
+        detected_compounds,
+        cfg.get('is_compounds', detected_is or []),
+        cfg.get('ss_compounds', detected_ss or []),
+    )
+    return roles['target_compounds'], roles['is_compounds'], roles['ss_compounds'], list(detected_compounds)
+
+
+def sort_compounds(compounds):
+    """Sort detected analytes by recognized family, chain length, then name."""
+    family_order = {'BAC': 0, 'DADMAC': 1, 'ATMAC': 2, 'Other': 3}
+    return sorted(
+        list(dict.fromkeys(compounds)),
+        key=lambda name: (
+            family_order.get(analyte_metadata(name)['type'], 3),
+            int(extract_chain_length(name)[1:]) if extract_chain_length(name) else 10**9,
+            str(name).upper(),
+        ),
+    )
+
+
+def _cell_text(value):
+    return str(value or '').strip()
+
+
+def _looks_like_header_row(row):
+    texts = [_cell_text(value).lower() for value in row]
+    has_name = any(value in {'name', 'compound', 'compound name', '名称', '化合物'} for value in texts)
+    has_data_hint = any(('blank' in value or 'sample' in value or 'ms' in value or value.startswith('f')) for value in texts)
+    return has_name and has_data_hint
+
+
+def _csv_rows(raw_bytes):
+    for encoding in ('utf-8-sig', 'utf-8', 'gb18030', 'big5'):
+        try:
+            text = raw_bytes.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            text = None
+    if text is None:
+        raise ValueError('CSV encoding is not supported; please save as UTF-8 or GB18030.')
+    sample = text[:8192]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
+    except csv.Error:
+        dialect = csv.excel
+    return [row for row in csv.reader(io.StringIO(text), dialect)]
+
+
+def _normalise_rows(rows):
+    rows = [[value.strip() if isinstance(value, str) else value for value in row] for row in rows]
+    header_index = next((i for i, row in enumerate(rows) if _looks_like_header_row(row)), None)
+    if header_index is None:
+        header_index = 0
+    header = rows[header_index]
+    body = rows[header_index + 1:]
+    name_col = next((i for i, value in enumerate(header)
+                     if _cell_text(value).lower() in {'name', 'compound', 'compound name', '名称', '化合物'}), 0)
+    data_start = name_col + 1
+    if data_start < len(header) and ('ion' in _cell_text(header[data_start]).lower() or '离子' in _cell_text(header[data_start])):
+        data_start += 1
+    return header, body, name_col, data_start
+
+
+def _read_csv_source(raw_bytes):
+    rows = _csv_rows(raw_bytes)
+    header, body, name_col, data_start = _normalise_rows(rows)
+    return _parse_tabular_rows(header, body, name_col, data_start)
+
+
+def _parse_tabular_rows(header, body, compound_col, data_start_col):
+    max_cols = max([len(header)] + [len(row) for row in body] or [0])
+    header = list(header) + [''] * (max_cols - len(header))
+    blanks, mss, samps = [], [], []
+    for index in range(data_start_col, max_cols):
+        hdr = _cell_text(header[index])
+        upper = hdr.upper()
+        letter = get_column_letter(index + 1)
+        if 'BLANK' in upper:
+            blanks.append((index + 1, letter, hdr))
+        elif re.search(r'\bMS(?:\d+)?\b|MATRIX\s*SPIKE', upper):
+            mss.append((index + 1, letter, hdr))
+        elif re.search(r'\d+\s*PPB', upper):
+            continue
+        elif hdr:
+            samps.append((index + 1, letter, hdr))
+
+    data = {}
+    compounds = []
+    for row in body:
+        row = list(row) + [None] * (max_cols - len(row))
+        name = normalize_analyte_name(_cell_text(row[compound_col]))
+        if not name:
+            continue
+        compounds.append(name)
+        data[name] = {get_column_letter(i + 1): row[i] for i in range(data_start_col, max_cols)}
+    target, is_c, ss_c = classify_compounds(compounds)
+    return data, blanks, mss, samps, target, is_c, ss_c, target + is_c + ss_c
+
+
+def resolve_ss_spike(name, cfg):
+    """Resolve a surrogate's own spike concentration by exact analyte name."""
+    configured = cfg.get('ss_spike_concentrations') or {}
+    if name in configured:
+        value = safe_float(configured[name])
+        if value is not None and value > 0:
+            return value
+    # Backward-compatible defaults for the current Demo only.
+    if 'd7' in name.lower():
+        return safe_float(cfg.get('ss_spike_d7_ppb', 4))
+    if 'd9' in name.lower():
+        return safe_float(cfg.get('ss_spike_d9_ppb', 4))
+    return safe_float(cfg.get('ss_spike_conc_ppb'))
+
+
+def mdl_formula(name, blank_range, cfg):
+    """Return the auditable Excel MDL formula for one analyte."""
+    override = (cfg.get('mdl_overrides') or {}).get(name) or {}
+    if override.get('blank_zero'):
+        concentration = safe_float(override.get('calibration_concentration'))
+        signal_to_noise = safe_float(override.get('signal_to_noise'))
+        if concentration is None or concentration <= 0:
+            raise ValueError(f'{name}: calibration concentration must be positive for S/N MDL.')
+        if signal_to_noise is None or signal_to_noise <= 0:
+            raise ValueError(f'{name}: signal-to-noise must be positive for S/N MDL.')
+        return f'=3*{concentration}/{signal_to_noise}'
+    return f'=3*STDEVA({blank_range})'
+
+
+def mdl_report_formula(name, bottle_ref, cfg):
+    """Return MDL in the same sample/report unit as final concentrations."""
+    override = (cfg.get('mdl_overrides') or {}).get(name) or {}
+    conversion_factor = safe_float(cfg.get('conversion_factor', 1))
+    if conversion_factor is None:
+        conversion_factor = 1.0
+    if override.get('blank_zero'):
+        concentration = safe_float(override.get('calibration_concentration'))
+        signal_to_noise = safe_float(override.get('signal_to_noise'))
+        if concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
+            raise ValueError(f'{name}: calibration concentration and S/N must be positive.')
+        return f'=3*{concentration}/{signal_to_noise}*{conversion_factor:g}'
+    return f'={bottle_ref}*{conversion_factor:g}'
+
+
+def significant_digits_formula(ref, digits=3):
+    """Return an Excel formula that displays a value to significant digits."""
+    return f'IFERROR(ROUND({ref},{digits}-1-INT(LOG10(ABS({ref})))),0)'
+
+
+def _round_significant(value, digits=3):
+    """Round a numeric value to significant figures without changing its type."""
+    value = safe_float(value)
+    if value is None or value == 0:
+        return 0.0 if value == 0 else None
+    places = digits - 1 - int(math.floor(math.log10(abs(value))))
+    return round(value, places)
+
+
+def _format_significant(value, digits=3):
+    """Format a number compactly for the human-readable median range."""
+    rounded = _round_significant(value, digits)
+    if rounded is None:
+        return 'NA'
+    return f'{rounded:g}'
+
+
+def _numeric_values(raw_data, compound, columns):
+    return [safe_float(raw_data.get(compound, {}).get(column_letter))
+            for _, column_letter, _ in columns
+            if safe_float(raw_data.get(compound, {}).get(column_letter)) is not None]
+
+
+def detect_blank_zero_compounds(raw_data, blank_cols):
+    """Detect analytes whose complete blank series is numeric zero."""
+    detected = []
+    for compound in raw_data:
+        values = [safe_float(raw_data.get(compound, {}).get(column_letter))
+                  for _, column_letter, _ in blank_cols]
+        if values and all(value is not None and value == 0 for value in values):
+            detected.append(compound)
+    return detected
+
+
+def validate_blank_zero_mdl(compound, blank_values, cfg):
+    """Validate that a blank-zero analyte has the required manual S/N rule."""
+    values = [safe_float(value) for value in blank_values]
+    if not values or not all(value is not None and value == 0 for value in values):
+        return None
+    override = (cfg.get('mdl_overrides') or {}).get(compound) or {}
+    concentration = safe_float(override.get('calibration_concentration'))
+    signal_to_noise = safe_float(override.get('signal_to_noise'))
+    if not override.get('blank_zero') or concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
+        raise ValueError(f'{compound}: blank=0 requires positive calibration concentration and S/N.')
+    return None
+
+
+def validate_blank_zero_configuration(raw_data, blank_cols, target_compounds, cfg):
+    """Reject processing when any all-zero target lacks manual S/N inputs."""
+    for compound in target_compounds:
+        blank_values = [raw_data.get(compound, {}).get(column_letter)
+                        for _, column_letter, _ in blank_cols]
+        validate_blank_zero_mdl(compound, blank_values, cfg)
+
+
+def _preview_mdl(compound, blank_cols, cfg):
+    override = (cfg.get('mdl_overrides') or {}).get(compound) or {}
+    if override.get('blank_zero'):
+        concentration = safe_float(override.get('calibration_concentration'))
+        signal_to_noise = safe_float(override.get('signal_to_noise'))
+        if concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
+            raise ValueError(f'{compound}: calibration concentration and S/N must be positive.')
+        return 3 * concentration / signal_to_noise
+    blanks = _numeric_values(cfg.get('_raw_data', {}), compound, blank_cols)
+    if len(blanks) < 2:
+        return None
+    return 3 * statistics.stdev(blanks)
+
+
+def compute_preview_summary(raw_data, blank_cols, sample_cols, cfg):
+    """Calculate numeric summary values for Streamlit without relying on Excel recalculation."""
+    cfg = dict(cfg or {})
+    cfg['_raw_data'] = raw_data
+    conversion_factor = safe_float(cfg.get('conversion_factor', 1))
+    if conversion_factor is None:
+        conversion_factor = 1.0
+    mql_factor = safe_float(cfg.get('mql_factor', 3.333333))
+    if mql_factor is None or mql_factor <= 0:
+        raise ValueError('mql_factor must be positive.')
+
+    rows = []
+    compounds = cfg.get('target_compounds') or []
+    for compound in compounds:
+        blanks = _numeric_values(raw_data, compound, blank_cols)
+        blank_average = statistics.mean(blanks) if blanks else None
+        mdl = _preview_mdl(compound, blank_cols, cfg)
+        report_mdl = mdl * conversion_factor if mdl is not None else None
+        half_mdl = (report_mdl / 2) if report_mdl is not None else None
+        final_values = []
+        true_detections = 0
+        valid_samples = 0
+        for _, column_letter, _ in sample_cols:
+            value = safe_float(raw_data.get(compound, {}).get(column_letter))
+            if value is None:
+                continue
+            valid_samples += 1
+            if blank_average is not None and value > blank_average:
+                true_detections += 1
+                final_values.append((value - blank_average) * conversion_factor)
+            elif half_mdl is not None:
+                final_values.append(half_mdl)
+
+        df_pct = (true_detections / valid_samples * 100) if valid_samples else 0.0
+        # DF reports true detections only. Descriptive concentration values use
+        # every available final value, including the approved 1/2 MDL substitutes.
+        if final_values:
+            ordered = sorted(final_values)
+            median = statistics.median(ordered)
+            if len(ordered) == 1:
+                q1 = q3 = ordered[0]
+            else:
+                quartiles = statistics.quantiles(ordered, n=4, method='inclusive')
+                q1, q3 = quartiles[0], quartiles[2]
+            median_iqr = f'{_format_significant(median)} ({_format_significant(q1)}-{_format_significant(q3)})'
+        else:
+            median_iqr = 'NC'
+
+        rows.append({
+            '名称': compound,
+            '链长': extract_chain_length(compound) or 'NA',
+            'DF (%)': _round_significant(df_pct),
+            'Median (Q1-Q3)': median_iqr,
+            'MDL': _round_significant(report_mdl),
+            'MQL': _round_significant(report_mdl * mql_factor) if report_mdl is not None else None,
+        })
+    return rows
+
+
+def compute_preview_final_table(raw_data, blank_cols, sample_cols, cfg):
+    """Return numeric final-concentration rows for an online sample preview."""
+    cfg = dict(cfg or {})
+    conversion_factor = safe_float(cfg.get('conversion_factor', 1)) or 1.0
+    rows = []
+    for compound in cfg.get('target_compounds') or []:
+        blanks = _numeric_values(raw_data, compound, blank_cols)
+        blank_average = statistics.mean(blanks) if blanks else None
+        mdl = _preview_mdl(compound, blank_cols, cfg)
+        half_mdl = mdl / 2 * conversion_factor if mdl is not None else None
+        result = {'名称': compound}
+        for _, column_letter, header in sample_cols:
+            value = safe_float(raw_data.get(compound, {}).get(column_letter))
+            if value is None:
+                result[header] = None
+            elif blank_average is not None and value > blank_average:
+                result[header] = round6((value - blank_average) * conversion_factor)
+            else:
+                result[header] = round6(half_mdl)
+        rows.append(result)
+    return rows
 
 
 # ============================================================
@@ -120,11 +466,36 @@ def sty(cell, s):  # apply style dict
 # 原始数据读取
 # ============================================================
 def read_raw(filepath_or_bytes):
+    if isinstance(filepath_or_bytes, (bytes, bytearray)):
+        raw_bytes = bytes(filepath_or_bytes)
+        if not raw_bytes.startswith(b'PK'):
+            return _read_csv_source(raw_bytes)
     if isinstance(filepath_or_bytes, bytes):
         wb = openpyxl.load_workbook(io.BytesIO(filepath_or_bytes), data_only=True)
     else:
         wb = openpyxl.load_workbook(filepath_or_bytes, data_only=True)
-    ws = wb['Sheet1']
+    ws = next((candidate for candidate in wb.worksheets
+               if any(_looks_like_header_row(list(row))
+                      for row in candidate.iter_rows(min_row=1, max_row=min(candidate.max_row, 20), values_only=True))), None)
+    if ws is None and 'Sheet1' in wb.sheetnames:
+        ws = wb['Sheet1']
+    if ws is None:
+        ws = next((candidate for candidate in wb.worksheets
+                   if candidate.max_row > 0 and candidate.max_column > 0), None)
+    if ws is None:
+        wb.close()
+        raise ValueError('No non-empty worksheet was found.')
+
+    preview_rows = [list(row) for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 20), values_only=True)]
+    header_index = next((i for i, row in enumerate(preview_rows) if _looks_like_header_row(row)), None)
+    if header_index is not None:
+        # The header is detected from a small preview, but the body must be
+        # read through the worksheet's actual last row.
+        rows = [list(row) for row in ws.iter_rows(min_row=1, values_only=True)]
+        header, body, compound_col, data_start = _normalise_rows(rows)
+        result = _parse_tabular_rows(header, body, compound_col, data_start)
+        wb.close()
+        return result
 
     compound_col = 2; data_start_col = 4
     for col in range(1, ws.max_column + 1):
@@ -151,7 +522,7 @@ def read_raw(filepath_or_bytes):
 
     data = {}
     for row in range(3, ws.max_row + 1):
-        nm = str(ws.cell(row=row, column=compound_col).value or '').strip()
+        nm = normalize_analyte_name(str(ws.cell(row=row, column=compound_col).value or '').strip())
         if not nm: continue
         data[nm] = {}
         for col in range(data_start_col, ws.max_column + 1):
@@ -159,13 +530,43 @@ def read_raw(filepath_or_bytes):
     # 读取化合物名称用于分类
     compounds_raw = []
     for row in range(3, ws.max_row + 1):
-        nm = str(ws.cell(row=row, column=compound_col).value or '').strip()
+        nm = normalize_analyte_name(str(ws.cell(row=row, column=compound_col).value or '').strip())
         if nm: compounds_raw.append(nm)
     wb.close()
 
     target, is_c, ss_c = classify_compounds(compounds_raw)
-    all_c = target + is_c + ss_c
-    return data, blanks, mss, samps, target, is_c, ss_c, all_c
+    return data, blanks, mss, samps, target, is_c, ss_c, target + is_c + ss_c
+
+
+def validate_input_layout(blanks, mss, samps, target_compounds, is_compounds, ss_compounds):
+    """Return a human-readable compatibility check for an imported MassHunter file."""
+    errors = []
+    warnings = []
+    if not blanks:
+        errors.append('未识别到 BLANK 列；请检查列名是否包含 BLANK。')
+    if not samps:
+        errors.append('未识别到 sample 列；样品列应使用 F1、F2 或 Sample-1 等名称。')
+    if not target_compounds:
+        errors.append('未识别到目标化合物行；请检查化合物名称列和数据行。')
+    if not mss:
+        warnings.append('未识别到 MS/基质加标列；基质加标回收率将无法计算。')
+    if len(blanks) < 2:
+        warnings.append('BLANK 列少于 2 个；标准差和 MDL 的稳定性需要确认。')
+    if not is_compounds:
+        warnings.append('未识别到 IS 内标；请在界面中确认是否使用内标校正。')
+    if not ss_compounds:
+        warnings.append('未识别到 SS 替代物；SS 回收率不会自动生成。')
+    all_headers = [item[2].strip().upper() for item in [*blanks, *mss, *samps] if item[2]]
+    duplicate_headers = sorted({header for header in all_headers if all_headers.count(header) > 1})
+    if duplicate_headers:
+        warnings.append('发现重复数据列名：' + ', '.join(duplicate_headers))
+    return {
+        'ready': not errors,
+        'errors': errors,
+        'warnings': warnings,
+        'summary': f'{len(blanks)} BLANK + {len(mss)} MS + {len(samps)} sample + '
+                   f'{len(is_compounds)} IS + {len(ss_compounds)} SS + {len(target_compounds)} 个目标物',
+    }
 
 
 # ============================================================
@@ -173,12 +574,12 @@ def read_raw(filepath_or_bytes):
 # ============================================================
 def classify_compounds(compounds):
     bac, ddac, atmac, metabolites, is_list, ss_list, others = [], [], [], [], [], [], []
-    for c in compounds:
-        cn = str(c).strip()
+    for c in list(dict.fromkeys(str(value).strip() for value in compounds if str(value).strip())):
+        cn = normalize_analyte_name(c)
         if not cn: continue
-        if any(kw in cn for kw in ['[C13]', 'COOH', '-d6', '-d3', 'OH-d3']): is_list.append(cn)
+        if any(kw in cn for kw in ['[C13]', '-d6', '-d3', 'OH-d3']): is_list.append(cn)
         elif re.match(r'd\d+-', cn): ss_list.append(cn)
-        elif 'DDAC' in cn.upper(): ddac.append(cn)
+        elif 'DADMAC' in cn.upper(): ddac.append(cn)
         elif 'ATMAC' in cn.upper(): atmac.append(cn)
         elif 'BAC' in cn.upper(): bac.append(cn)
         else: others.append(cn)
@@ -192,7 +593,7 @@ def classify_compounds(compounds):
         if '+O' in c or '+2O' in c: meta.append(c)
         else: pure_bac.append(c)
     metabolites = meta + metabolites
-    target = pure_bac + ddac + atmac + metabolites + others
+    target = sort_compounds(pure_bac + ddac + atmac + metabolites + others)
     return target, is_list, ss_list
 
 
@@ -248,7 +649,9 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
 
     # 数据行（跳过 SS，SS 单独放底部）
     row = 3
-    non_ss = [c for c in ALL_COMPS if c not in SS_COMPS]
+    all_compounds = cfg.get('all_compounds', ALL_COMPS)
+    selected_ss = cfg.get('ss_compounds', SS_COMPS)
+    non_ss = [c for c in all_compounds if c not in selected_ss]
     for comp in non_ss:
         ws.cell(row=row, column=1, value=comp); sty(ws.cell(row=row,column=1), S['cmpd'])
 
@@ -298,9 +701,12 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
         sty(ws.cell(row=row,column=c), S['yell'])
     row += 1
 
-    for ss in SS_COMPS:
+    selected_ss = cfg.get('ss_compounds', SS_COMPS)
+    for ss in selected_ss:
         ws.cell(row=row, column=1, value=ss); sty(ws.cell(row=row,column=1), S['cmpd'])
-        this_ss_spike = ss_spike_d7 if 'd7' in ss else ss_spike_d9
+        this_ss_spike = resolve_ss_spike(ss, cfg)
+        if this_ss_spike is None or this_ss_spike <= 0:
+            raise ValueError(f'{ss}: missing positive SS spike concentration.')
         # MS数据列：照抄原始浓度（不除以任何值）
         for i, (_, cl, _) in enumerate(ms_cols):
             v = safe_float(raw_data.get(ss, {}).get(cl))
@@ -390,7 +796,7 @@ def build_sheet2(wb, raw_data, blank_cols, S, cfg):
     blank_r = get_column_letter(2 + n_b - 1)
 
     first_data_row = row
-    for comp in ALL_COMPS:
+    for comp in cfg.get('all_compounds', ALL_COMPS):
         ws.cell(row=row, column=1, value=comp); sty(ws.cell(row=row,column=1), S['cmpd'])
 
         # Blank 值
@@ -412,7 +818,7 @@ def build_sheet2(wb, raw_data, blank_cols, S, cfg):
 
         # J: MDL = 3*STDEVA(blanks) — 公式
         c_mdl = ws.cell(row=row, column=mdl_c)
-        c_mdl.value = f'=3*STDEVA({br})'
+        c_mdl.value = mdl_formula(comp, br, cfg)
         c_mdl.number_format = '0.000000'
         sty(c_mdl, S['data'])
 
@@ -433,7 +839,8 @@ def build_sheet2(wb, raw_data, blank_cols, S, cfg):
         sty(ws.cell(row=row,column=c), S['yell'])
     row += 1
 
-    for ss in SS_COMPS:
+    selected_ss = cfg.get('ss_compounds', SS_COMPS)
+    for ss in selected_ss:
         ws.cell(row=row, column=1, value=ss); sty(ws.cell(row=row,column=1), S['cmpd'])
         for i, (_, cl, _) in enumerate(blank_cols):
             v = safe_float(raw_data.get(ss, {}).get(cl))
@@ -453,6 +860,7 @@ def build_sheet2(wb, raw_data, blank_cols, S, cfg):
         'avg_c': avg_c, 'mdl_c': mdl_c, 'half_c': half_c,
         'avg_l': avg_l, 'mdl_l': get_column_letter(mdl_c), 'half_l': get_column_letter(half_c),
         'first_row': first_data_row,
+        'row_map': {comp: first_data_row + index for index, comp in enumerate(cfg.get('all_compounds', ALL_COMPS))},
     }
     return ws, info
 
@@ -479,7 +887,7 @@ def build_sheet3(wb, raw_data, sample_cols, S, cfg):
     row += 1
     first_row = row
 
-    for comp in TARGET_COMPS:
+    for comp in cfg.get('target_compounds', TARGET_COMPS):
         ws.cell(row=row, column=1, value=comp); sty(ws.cell(row=row,column=1), S['cmpd'])
         for i, (_, cl, _) in enumerate(sample_cols):
             v = safe_float(raw_data.get(comp, {}).get(cl))
@@ -575,11 +983,13 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
 
     # 行号映射
     s2_first = blank_info['first_row']
-    comp2row_s2 = {c: s2_first + i for i, c in enumerate(ALL_COMPS)}
-    comp2row_s3 = {c: s3_first + i for i, c in enumerate(TARGET_COMPS)}
+    all_compounds = cfg.get('all_compounds', ALL_COMPS)
+    target_compounds = cfg.get('target_compounds', TARGET_COMPS)
+    comp2row_s2 = {c: s2_first + i for i, c in enumerate(all_compounds)}
+    comp2row_s3 = {c: s3_first + i for i, c in enumerate(target_compounds)}
 
     row = 4
-    for comp in TARGET_COMPS:
+    for comp in target_compounds:
         ws.cell(row=row, column=1, value=comp); sty(ws.cell(row=row,column=1), S['cmpd'])
         s2r = comp2row_s2.get(comp)
         s3r = comp2row_s3.get(comp)
@@ -589,19 +999,25 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
         if s2r: cb.value = f"='{blanks_name}'!{al}{s2r}"; cb.number_format = '0.000000'
         sty(cb, S['data'])
 
-        # C: MDL
+        # C: MDL in the report/sample unit (bottle MDL is converted once).
         cc = ws.cell(row=row, column=3)
-        if s2r: cc.value = f"='{blanks_name}'!{ml}{s2r}"; cc.number_format = '0.000000'
+        if s2r: cc.value = f"='{blanks_name}'!{ml}{s2r}*$B$38"; cc.number_format = '0.000000'
         sty(cc, S['data'])
 
-        # 样品数据范围 (P~CX)
+        # Final concentration range (P~CX) and hidden detection-status range.
+        # Status is 1 only when the original bottle value exceeds the blank average.
         sl = get_column_letter(sample_start)
         el = get_column_letter(last_sample)
         sr = f'{sl}{row}:{el}{row}'
+        detection_start = last_sample + 1
+        detection_end = detection_start + n_s - 1
+        dsl = get_column_letter(detection_start)
+        del_ = get_column_letter(detection_end)
+        dsr = f'{dsl}{row}:{del_}{row}'
 
         # D: DF 检出率
         cd = ws.cell(row=row, column=4)
-        cd.value = f'=COUNT({sr})/COLUMNS({sr})'
+        cd.value = f'=IFERROR(COUNTIF({dsr},">0")/COUNT({dsr}),0)'
         cd.number_format = '0.00%'
         sty(cd, S['stat'])
 
@@ -623,18 +1039,25 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
         # 样品数据列 P~CX
         for i in range(n_s):
             col = sample_start + i
+            detection_col = detection_start + i
             s3_cl = get_column_letter(2 + i)
 
             if s2r and s3r:
+                ws.cell(row=row, column=detection_col).value = (
+                    f"=IF('{bottle_name}'!{s3_cl}{s3r}=\"\",\"\","
+                    f"IF('{bottle_name}'!{s3_cl}{s3r}>'{blanks_name}'!{al}{s2r},1,0))"
+                )
+                ws.cell(row=row, column=detection_col).number_format = '0'
                 formula = (
                     f"=IF('{bottle_name}'!{s3_cl}{s3r}=\"\",\"\","
                     f"IF('{bottle_name}'!{s3_cl}{s3r}>'{blanks_name}'!{al}{s2r},"
                     f"('{bottle_name}'!{s3_cl}{s3r}-'{blanks_name}'!{al}{s2r})*$B$38,"
-                    f"'{blanks_name}'!{hl}{s2r}*$B$38))"
+                    f"'{blanks_name}'!{hl}{s2r}))"
                 )
                 ws.cell(row=row, column=col).value = formula
                 ws.cell(row=row, column=col).number_format = '0.000000'
             sty(ws.cell(row=row, column=col), S['data'])
+            ws.column_dimensions[get_column_letter(detection_col)].hidden = True
         row += 1
 
     ws.row_dimensions[1].height = 19.5
@@ -646,7 +1069,7 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
 # ============================================================
 # Sheet 5: 统计计算数据
 # ============================================================
-def build_sheet5(wb, sample_cols, S):
+def build_sheet5(wb, sample_cols, S, cfg=None):
     ws = wb.create_sheet('统计计算结果')
     n_s = len(sample_cols)
     fn = 'Final. conc 最终计算浓度'
@@ -665,7 +1088,8 @@ def build_sheet5(wb, sample_cols, S):
         sty(ws.cell(row=3,column=2+i), S['data'])
 
     row = 4
-    for idx, comp in enumerate(TARGET_COMPS):
+    cfg = cfg or {}
+    for idx, comp in enumerate(cfg.get('target_compounds', TARGET_COMPS)):
         fr = 4 + idx
         ws.cell(row=row, column=1, value=comp); sty(ws.cell(row=row,column=1), S['cmpd'])
         for i in range(n_s):
@@ -674,6 +1098,70 @@ def build_sheet5(wb, sample_cols, S):
         row += 1
 
     ws.column_dimensions['A'].width = 30.0
+    return ws
+
+
+def build_summary_sheet(wb, final_sheet, blank_info, sample_cols, S, cfg):
+    """Create a compact, formula-driven descriptive-statistics sheet."""
+    title = '\u63cf\u8ff0\u6027\u7edf\u8ba1'
+    ws = wb.create_sheet(title)
+    final_name = final_sheet.title
+    blanks_name = 'Blanks_MDL \u7a7a\u767d\u57fa\u8d28\u68c0\u51fa\u9650'
+    sample_start = 16
+    last_sample = sample_start + len(sample_cols) - 1
+    first_letter = get_column_letter(sample_start)
+    last_letter = get_column_letter(last_sample)
+    target_compounds = cfg.get('target_compounds', TARGET_COMPS)
+    mql_factor = safe_float(cfg.get('mql_factor', 3.333333333))
+    if mql_factor is None or mql_factor <= 0:
+        raise ValueError('mql_factor must be positive.')
+
+    headers = ['\u540d\u79f0', '\u94fe\u957f', 'DF (%)', 'Median (Q1-Q3)', 'MDL', 'MQL']
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+    ws.cell(row=1, column=1, value='\u63cf\u8ff0\u6027\u7edf\u8ba1\uff08\u4fdd\u75593\u4f4d\u6709\u6548\u6570\u5b57\uff09')
+    sty(ws.cell(row=1, column=1), S['hdr'])
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(headers))
+    ws.cell(row=2, column=1, value=f'MQL = MDL × {mql_factor:g}；DF 始终展示真实检出率；Median(Q1-Q3) 基于所有最终浓度且不受 DF 门槛限制；MDL 引用 Blanks_MDL；公式保留。')
+    sty(ws.cell(row=2, column=1), S['yell'])
+    for col, header in enumerate(headers, 1):
+        ws.cell(row=3, column=col, value=header)
+        sty(ws.cell(row=3, column=col), S['hdr'])
+
+    mdl_letter = blank_info['mdl_l']
+    for index, compound in enumerate(target_compounds):
+        row = 4 + index
+        final_row = 4 + index
+        sample_range = f"'{final_name}'!{first_letter}{final_row}:{last_letter}{final_row}"
+        ws.cell(row=row, column=1, value=compound)
+        ws.cell(row=row, column=2, value=extract_chain_length(compound) or 'NA')
+        ws.cell(row=row, column=3, value=f'={significant_digits_formula(f"\'{final_name}\'!D{final_row}")}')
+        # The result sheet summarizes all final concentrations independently
+        # from DF. Final values include approved 1/2 MDL substitutions.
+        median_formula = significant_digits_formula(f'MEDIAN({sample_range})')
+        q1_formula = significant_digits_formula(f'PERCENTILE({sample_range},0.25)')
+        q3_formula = significant_digits_formula(f'PERCENTILE({sample_range},0.75)')
+        ws.cell(row=row, column=4, value=(
+            f'=IF(COUNT({sample_range})>0,{median_formula}&" ("&{q1_formula}&"-"&{q3_formula}&")","NC")'
+        ))
+        blank_row = blank_info['row_map'].get(compound)
+        if blank_row is None:
+            raise ValueError(f'{compound}: missing MDL row in blank sheet.')
+        mdl_ref = f"'{blanks_name}'!{mdl_letter}{blank_row}"
+        # Use the same report-unit MDL as Final. conc; blank-zero analytes use
+        # the explicit calibration/SN formula and are converted exactly once.
+        report_mdl_formula = mdl_report_formula(compound, mdl_ref, cfg)
+        ws.cell(row=row, column=5, value=f'={significant_digits_formula(report_mdl_formula[1:])}')
+        ws.cell(row=row, column=6, value=f'={significant_digits_formula(f"({report_mdl_formula[1:]})*{mql_factor}")}')
+        for col in range(1, 7):
+            sty(ws.cell(row=row, column=col), S['cmpd'] if col in (1, 2) else S['stat'])
+        ws.cell(row=row, column=3).number_format = '0.0%'
+        for col in (5, 6):
+            ws.cell(row=row, column=col).number_format = '0.000000'
+
+    for col, width in enumerate([30, 12, 12, 28, 14, 14], 1):
+        ws.column_dimensions[get_column_letter(col)].width = width
+    ws.freeze_panes = 'A4'
+    ws.auto_filter.ref = f'A3:F{3 + len(target_compounds)}'
     return ws
 
 
@@ -693,8 +1181,8 @@ def build_info_sheet(wb, S, cfg):
         ['Sheet2: 1/2 MDL','=ROUND(MDL/2*$A$1,6) 公式','Sheet2 K列',f'单位:{cfg["output_unit"]}，$A$1=换算因子={cfg["conversion_factor"]}'],
         ['Sheet3','原始数据实际样品列直接迁移','原始数据','空白单元格保持空白'],
         ['Sheet4 B/C','引用Sheet2 I/J列','Sheet2',''],
-        ['Sheet4 R~DA','IF(瓶内值>空白平均,(瓶内值-空白平均)×$B$38, 1/2MDL×$B$38)','Sheet2/Sheet3','$B$38=换算因子'],
-        ['Sheet4 DF','COUNT/COLUMNS 公式','Sheet4 样品列',''],
+        ['Sheet4 R~DA','IF(瓶内值>空白平均,(瓶内值-空白平均)×$B$38, 1/2MDL)','Sheet2/Sheet3','$B$38=换算因子；1/2 MDL 已在 Sheet2 转换'],
+        ['Sheet4 DF','COUNTIF(隐藏检出状态,">0")/COUNT(隐藏检出状态)','Sheet4 样品列','仅原始瓶内值>空白平均值计为真实检出；1/2 MDL 不计入 DF'],
         ['Sheet4 统计','IF(DF>50%,统计函数,"NC")','Sheet4','空值自动忽略'],
         ['换算因子位置','Sheet2 $A$1 + Sheet4 $B$38','','两处均可独立修改'],
         ['本次参数',f'样本:{cfg["sample_type"]} 取样:{cfg["sample_volume_ml"]}mL 定容:{cfg["final_volume_ml"]}mL 换算因子:{cfg["conversion_factor"]}','',''],
@@ -723,16 +1211,22 @@ def process(config=None, return_bytes=False):
         如果 return_bytes=True，返回 (bytes, filename)
         否则返回 output_filepath
     """
-    cfg = config or CONFIG
+    cfg = {**CONFIG, **(config or {})}
     input_src = cfg.get('input_file', '')
     input_bytes = cfg.get('input_bytes', None)
     src = input_bytes if input_bytes else input_src
     if not src:
         raise ValueError('No input file or data provided')
-    raw_data, blanks, mss, samps, target, is_c, ss_c, all_c = read_raw(src)
+    raw_data, blanks, mss, samps, detected_target, detected_is, detected_ss, detected_all = read_raw(src)
+    target, is_c, ss_c, all_c = configured_compound_lists(cfg, detected_all, detected_is, detected_ss)
+    cfg['target_compounds'] = target
+    cfg['is_compounds'] = is_c
+    cfg['ss_compounds'] = ss_c
+    cfg['all_compounds'] = all_c
+    validate_blank_zero_configuration(raw_data, blanks, target, cfg)
 
     # 验证
-    missing = [c for c in ALL_COMPS if c not in raw_data]
+    missing = [c for c in all_c if c not in raw_data]
     if missing:
         print(f"WARNING: {len(missing)} compounds not found: {missing}")
 
@@ -750,12 +1244,15 @@ def process(config=None, return_bytes=False):
     _, s3_first = build_sheet3(wb, raw_data, samps, S, cfg)
 
     print("[4/6] Final conc...")
-    build_sheet4(wb, raw_data, samps, binfo, s3_first, S, cfg)
+    final_sheet = build_sheet4(wb, raw_data, samps, binfo, s3_first, S, cfg)
 
     print("[5/6] Stats helper...")
-    build_sheet5(wb, samps, S)
+    build_sheet5(wb, samps, S, cfg)
 
-    print("[6/6] Info sheet...")
+    print("[6/7] Descriptive summary...")
+    build_summary_sheet(wb, final_sheet, binfo, samps, S, cfg)
+
+    print("[7/7] Info sheet...")
     build_info_sheet(wb, S, cfg)
 
     if return_bytes:

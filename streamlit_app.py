@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 LC-MS/MS 数据处理智能体 — Streamlit 可视化界面
@@ -9,7 +9,23 @@ import pandas as pd
 import tempfile
 import os
 import io
-from process_lcms_data import process, read_raw, classify_compounds
+from process_lcms_data import (
+    process, read_raw, classify_compounds, resolve_roles,
+    compute_preview_summary, compute_preview_final_table, detect_blank_zero_compounds,
+    validate_input_layout,
+)
+
+
+def read_preview_table(file_bytes):
+    """Read either an XLSX or a delimited MassHunter export for display."""
+    if file_bytes.startswith(b'PK'):
+        return pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None)
+    for encoding in ('utf-8-sig', 'utf-8', 'gb18030', 'big5'):
+        try:
+            return pd.read_csv(io.BytesIO(file_bytes), header=None, encoding=encoding, sep=None, engine='python')
+        except (UnicodeDecodeError, pd.errors.ParserError):
+            continue
+    raise ValueError('无法识别 CSV 编码或分隔符，请保存为 UTF-8、GB18030 或制表符分隔的 CSV。')
 
 # ============================================================
 # 中英文对照字典
@@ -39,7 +55,7 @@ T = {
     'ss_spike_help':        {'zh': '替代物自身的理论加标浓度，可能不同于基质加标浓度',
                              'en': 'Theoretical spike concentration of surrogates, may differ from matrix spike conc'},
     'file_header':          {'zh': '📁 文件',                                    'en': '📁 File'},
-    'upload_label':         {'zh': '上传原始数据 Excel',                           'en': 'Upload Raw Data Excel'},
+    'upload_label':         {'zh': '上传原始数据（XLSX 或 CSV）',                  'en': 'Upload Raw Data (XLSX or CSV)'},
     'output_name':          {'zh': '输出文件名',                                  'en': 'Output Filename'},
     'output_default':       {'zh': '已处理数据.xlsx',                             'en': 'processed_data.xlsx'},
     'tip':                  {'zh': '上传文件 → 调参数 → 点处理 → 下载结果',        'en': 'Upload → Adjust Params → Process → Download'},
@@ -150,12 +166,7 @@ with st.sidebar:
 
     st.divider()
     st.header(t('file_header', L))
-    uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx"])
-
-    # Demo 数据加载（暂不可用：GitHub 上传 xlsx 会损坏）
-    # use_demo = st.button(t('demo_btn', L), help=t('demo_help', L), use_container_width=True)
-    # if use_demo:
-    #     st.session_state.demo_active = True
+    uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx", "xls", "csv", "tsv"])
 
     output_name = st.text_input(t('output_name', L), t('output_default', L))
 
@@ -222,14 +233,28 @@ if uploaded_file:
     st.session_state.pop('demo_bytes', None)
 
 if st.session_state.get('demo_active') and file_bytes:
-    st.info('Demo data loaded. You can now click Start Processing.')
+    st.info('Demo 数据已加载：这是可直接处理的尿液 MassHunter 示例；可检查识别结果后点击“开始处理”。')
+
+selected_is = []
+selected_ss = []
+ss_concentrations = {}
+mdl_overrides = {}
+mql_factor = 3.333333
 
 if file_bytes:
     st.subheader(t('raw_preview', L))
     try:
         raw_data, blanks, mss, samps, target, is_c, ss_c, all_c = read_raw(file_bytes)
 
-        df_raw = pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None)
+        layout_report = validate_input_layout(blanks, mss, samps, target, is_c, ss_c)
+        if layout_report['ready']:
+            st.success(f"文件格式检查通过：{layout_report['summary']}")
+        else:
+            st.error('文件格式检查未通过：' + '；'.join(layout_report['errors']))
+        for message in layout_report['warnings']:
+            st.warning(message)
+
+        df_raw = read_preview_table(file_bytes)
         st.dataframe(df_raw.head(8), use_container_width=True)
 
         col1, col2, col3, col4 = st.columns(4)
@@ -247,6 +272,52 @@ if file_bytes:
         col1.metric(t('blank_cols', L), len(blanks))
         col2.metric(t('ms_cols', L), len(mss))
         col3.metric(t('sample_cols', L), len(samps))
+
+        st.subheader('化合物角色设置')
+        st.caption('系统按名称预识别；请确认哪些为 IS、SS。未选为 IS/SS 的化合物将作为目标物。')
+        selected_is = st.multiselect('IS 内标（可多选）', all_c, default=is_c)
+        selected_ss = st.multiselect('SS 替代物（可多选）', all_c, default=ss_c)
+        overlap = set(selected_is) & set(selected_ss)
+        if overlap:
+            st.error(f'同一化合物不能同时作为 IS 与 SS：{sorted(overlap)}')
+        if selected_ss:
+            st.write('SS 各自理论加标浓度（ppb）')
+            ss_grid = st.columns(min(3, len(selected_ss)))
+            for i, name in enumerate(selected_ss):
+                with ss_grid[i % len(ss_grid)]:
+                    ss_concentrations[name] = st.number_input(
+                        name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
+                    )
+
+        with st.expander('blank=0 的 MDL 设置'):
+            detected_blank_zero = detect_blank_zero_compounds(raw_data, blanks)
+            blank_zero_compounds = st.multiselect(
+                '选择 blank=0 的化合物', all_c,
+                default=[name for name in detected_blank_zero if name in all_c],
+            )
+            if blank_zero_compounds:
+                st.caption('对每个所选化合物输入标曲浓度和对应 S/N：MDL = 3 × 标曲浓度 ÷ S/N。')
+                mdl_cols = st.columns(min(3, len(blank_zero_compounds)))
+                for i, name in enumerate(blank_zero_compounds):
+                    with mdl_cols[i % len(mdl_cols)]:
+                        calibration = st.number_input(
+                            f'{name} 标曲浓度 (ppb)', min_value=0.0, value=0.0,
+                            step=0.1, key=f'mdl_cal_{name}'
+                        )
+                        sn = st.number_input(
+                            f'{name} S/N', min_value=0.0, value=0.0,
+                            step=1.0, key=f'mdl_sn_{name}'
+                        )
+                        mdl_overrides[name] = {
+                            'blank_zero': True,
+                            'calibration_concentration': calibration,
+                            'signal_to_noise': sn,
+                        }
+
+        mql_factor = st.number_input(
+            'MQL / MDL 倍数', min_value=0.000001, value=3.333333,
+            step=0.1, format='%.6f', help='默认 3.333333；请按实验室方法确认。'
+        )
 
     except Exception as e:
         st.warning(f"{t('preview_warn', L)}: {e}")
@@ -269,6 +340,11 @@ if process_btn and file_bytes:
             'spike_conc_ppb': int(spike_conc),
             'ss_spike_d7_ppb': int(ss_spike_d7),
             'ss_spike_d9_ppb': int(ss_spike_d9),
+            'is_compounds': selected_is,
+            'ss_compounds': selected_ss,
+            'ss_spike_concentrations': ss_concentrations,
+            'mdl_overrides': mdl_overrides,
+            'mql_factor': float(mql_factor),
             'masshunter_unit': 'ppb',
             'output_unit': output_unit,
             'blank_handling': 'ND',
@@ -281,6 +357,19 @@ if process_btn and file_bytes:
             output_bytes, filename = process(config=config, return_bytes=True)
 
             st.success(t('success', L))
+
+            roles = resolve_roles(all_c, selected_is, selected_ss)
+            preview_cfg = {**config, 'target_compounds': roles['target_compounds']}
+            preview_rows = compute_preview_summary(raw_data, blanks, samps, preview_cfg)
+            if preview_rows:
+                st.subheader('描述性统计（在线数值预览）')
+                st.caption('这里显示已计算的数值；下载的 Excel 同时保留可审计公式。')
+                st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
+
+            final_preview_rows = compute_preview_final_table(raw_data, blanks, samps, preview_cfg)
+            if final_preview_rows:
+                st.subheader('最终浓度（在线数值预览）')
+                st.dataframe(pd.DataFrame(final_preview_rows), use_container_width=True)
 
             st.subheader(t('result_preview', L))
             import openpyxl

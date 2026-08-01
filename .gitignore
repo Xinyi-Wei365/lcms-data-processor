@@ -3,3 +3,4 @@ __pycache__/
 .env
 *.xlsx
 !sample_*.xlsx
+!demo_urine_qac_masshunter.xlsx
