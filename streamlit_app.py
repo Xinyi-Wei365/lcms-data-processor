@@ -12,8 +12,36 @@ import io
 from process_lcms_data import (
     process, read_raw, classify_compounds, resolve_roles,
     compute_preview_summary, compute_preview_final_table, detect_blank_zero_compounds,
-    validate_input_layout,
 )
+
+try:
+    from process_lcms_data import validate_input_layout
+except ImportError:
+    # Keep the app bootable while Streamlit Cloud refreshes an older module cache.
+    def validate_input_layout(blanks, mss, samps, target_compounds, is_compounds, ss_compounds):
+        errors = []
+        warnings = []
+        if not blanks:
+            errors.append('未识别到 BLANK 列；请检查列名是否包含 BLANK。')
+        if not samps:
+            errors.append('未识别到 sample 列；请检查样品列名称。')
+        if not target_compounds:
+            errors.append('未识别到目标化合物行；请检查化合物名称列。')
+        if not mss:
+            warnings.append('未识别到 MS/基质加标列；基质加标回收率将无法计算。')
+        if len(blanks) < 2:
+            warnings.append('BLANK 列少于 2 个；请确认 MDL 计算所需的空白数量。')
+        if not is_compounds:
+            warnings.append('未识别到 IS 内标；请确认是否使用内标校正。')
+        if not ss_compounds:
+            warnings.append('未识别到 SS 替代物；SS 回收率不会自动生成。')
+        return {
+            'ready': not errors,
+            'errors': errors,
+            'warnings': warnings,
+            'summary': f'{len(blanks)} BLANK + {len(mss)} MS + {len(samps)} sample + '
+                       f'{len(is_compounds)} IS + {len(ss_compounds)} SS + {len(target_compounds)} 个目标物',
+        }
 
 
 def read_preview_table(file_bytes):
