@@ -71,9 +71,6 @@ T = {
     'is_opts':              {'zh': ['✅ 是，有内标校正','❌ 否，无内标校正'],       'en': ['✅ Yes, IS Corrected','❌ No, Raw Concentration']},
     'is_help':              {'zh': '内标校正后，导出值已是原始样本浓度；无内标校正则需要手动换算',
                              'en': 'With IS correction, exported values are already original sample concentration; without IS correction, manual conversion is needed'},
-    'is_mode':              {'zh': 'IS 校正模式', 'en': 'IS correction mode'},
-    'is_mode_opts':         {'zh': ['MassHunter 已完成 IS 校正（推荐）', '手动响应比校正'], 'en': ['MassHunter IS-corrected (recommended)', 'Manual response-ratio correction']},
-    'is_response_help':     {'zh': '只有原始文件包含目标物/IS 响应比或已知校正因子时才能使用；仅有浓度值不能反推响应比。', 'en': 'Use only when explicit target/IS response factors are available; concentration-only exports cannot reconstruct a response ratio.'},
     'csv_note':             {'zh': 'CSV 是单页、无公式数值报告；需要多工作表和可审计公式时请选择 XLSX。', 'en': 'CSV is a flat, formula-free report; choose XLSX for multi-sheet formulas.'},
     'cf_caption_yes':       {'zh': '💡 有内标校正，仪器已自动将进样瓶浓度换算为原始尿液浓度，换算因子 = 1',
                              'en': '💡 IS corrected: instrument has already converted vial concentration to original sample concentration. CF = 1'},
@@ -188,8 +185,6 @@ with st.sidebar:
         help=t('is_help', L)
     )
     is_corrected = use_is.startswith("✅")
-    is_mode_label = st.selectbox(t('is_mode', L), t('is_mode_opts', L), index=0, help=t('is_response_help', L))
-    is_mode = 'response_ratio' if is_mode_label == t('is_mode_opts', L)[1] else 'masshunter'
 
     if is_corrected:
         auto_cf = 1.0
@@ -291,7 +286,6 @@ if st.session_state.get('demo_active') and file_bytes:
 selected_is = []
 selected_ss = []
 ss_concentrations = {}
-response_factors = {}
 mdl_overrides = {}
 mql_factor = 3.333333
 
@@ -341,18 +335,6 @@ if file_bytes:
                 with ss_grid[i % len(ss_grid)]:
                     ss_concentrations[name] = st.number_input(
                         name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
-                    )
-
-        response_factors = {}
-        if is_mode == 'response_ratio':
-            st.caption(t('is_response_help', L))
-            factor_targets = [name for name in all_c if name not in selected_is and name not in selected_ss]
-            factor_grid = st.columns(min(3, max(1, len(factor_targets))))
-            for i, name in enumerate(factor_targets):
-                with factor_grid[i % len(factor_grid)]:
-                    response_factors[name] = st.number_input(
-                        f'{name} factor', min_value=0.000001, value=1.0, step=0.01,
-                        key=f'is_factor_{name}'
                     )
 
         with st.expander(t('blank_zero_header', L)):
@@ -408,8 +390,6 @@ if process_btn and file_bytes:
             'ss_spike_d9_ppb': int(ss_spike_d9),
             'is_compounds': selected_is,
             'ss_compounds': selected_ss,
-            'is_correction_mode': is_mode,
-            'is_response_factors': response_factors,
             'ss_spike_concentrations': ss_concentrations,
             'mdl_overrides': mdl_overrides,
             'mql_factor': float(mql_factor),

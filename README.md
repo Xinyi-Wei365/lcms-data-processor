@@ -20,3 +20,5 @@ streamlit run streamlit_app.py
 ## 在线使用
 
 访问 Streamlit Cloud 部署链接（见仓库 About 或部署后生成的 URL）。
+
+界面只保留一个“数据是否经过内标（IS）校正？”选项：已校正时换算因子为 1；未校正时仅按取样体积、定容体积和稀释倍数进行换算，不会凭浓度猜测 IS 响应比。

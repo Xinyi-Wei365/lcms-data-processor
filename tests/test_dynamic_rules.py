@@ -37,17 +37,6 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual(is_compounds, ['PFAS internal standard'])
         self.assertEqual(ss_compounds, ['PFAS surrogate'])
 
-    def test_response_ratio_mode_requires_explicit_factors(self):
-        with self.assertRaises(ValueError):
-            processor.validate_is_correction_configuration(
-                {'is_correction_mode': 'response_ratio', 'is_response_factors': {}},
-                ['C8-BAC'],
-            )
-        self.assertIsNone(processor.validate_is_correction_configuration(
-            {'is_correction_mode': 'response_ratio', 'is_response_factors': {'C8-BAC': 1.2}},
-            ['C8-BAC'],
-        ))
-
     def test_mdl_formula_uses_signal_to_noise_for_blank_zero(self):
         formula = processor.mdl_formula(
             'C12-Other',

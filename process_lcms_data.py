@@ -133,37 +133,6 @@ def configured_compound_lists(cfg, detected_compounds, detected_is=None, detecte
     return roles['target_compounds'], roles['is_compounds'], roles['ss_compounds'], list(detected_compounds)
 
 
-def validate_is_correction_configuration(cfg, target_compounds):
-    """Validate optional manual IS response factors before processing.
-
-    MassHunter concentration exports do not contain enough information to
-    reconstruct an IS response ratio. A response-ratio mode therefore must
-    provide one positive, explicit factor for every target analyte.
-    """
-    mode = str((cfg or {}).get('is_correction_mode', 'masshunter')).lower()
-    if mode not in {'masshunter', 'response_ratio'}:
-        raise ValueError('Unknown IS correction mode.')
-    if mode == 'masshunter':
-        return None
-    factors = (cfg or {}).get('is_response_factors') or {}
-    missing = [name for name in target_compounds if safe_float(factors.get(name)) is None or safe_float(factors.get(name)) <= 0]
-    if missing:
-        raise ValueError('Response-ratio IS mode requires a positive factor for every target: ' + ', '.join(missing))
-    return None
-
-
-def analyte_response_factor(compound, cfg):
-    """Return a manually supplied response-ratio factor, or 1 for MassHunter-corrected data."""
-    if str((cfg or {}).get('is_correction_mode', 'masshunter')).lower() != 'response_ratio':
-        return 1.0
-    factor = safe_float(((cfg or {}).get('is_response_factors') or {}).get(compound))
-    return factor if factor is not None and factor > 0 else 1.0
-
-
-def _formula_factor(value):
-    return '' if value == 1 else f'*{value:g}'
-
-
 def sort_compounds(compounds):
     """Sort detected analytes by recognized family, chain length, then name."""
     family_order = {'BAC': 0, 'DADMAC': 1, 'ATMAC': 2, 'Other': 3}
@@ -296,8 +265,8 @@ def mdl_report_formula(name, bottle_ref, cfg):
         signal_to_noise = safe_float(override.get('signal_to_noise'))
         if concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
             raise ValueError(f'{name}: calibration concentration and S/N must be positive.')
-        return f'=3*{concentration}/{signal_to_noise}*{conversion_factor:g}{_formula_factor(analyte_response_factor(name, cfg))}'
-    return f'={bottle_ref}*{conversion_factor:g}{_formula_factor(analyte_response_factor(name, cfg))}'
+        return f'=3*{concentration}/{signal_to_noise}*{conversion_factor:g}'
+    return f'={bottle_ref}*{conversion_factor:g}'
 
 
 def significant_digits_formula(ref, digits=3):
@@ -391,7 +360,7 @@ def compute_preview_summary(raw_data, blank_cols, sample_cols, cfg):
         blanks = _numeric_values(raw_data, compound, blank_cols)
         blank_average = statistics.mean(blanks) if blanks else None
         mdl = _preview_mdl(compound, blank_cols, cfg)
-        report_mdl = mdl * conversion_factor * analyte_response_factor(compound, cfg) if mdl is not None else None
+        report_mdl = mdl * conversion_factor if mdl is not None else None
         half_mdl = (report_mdl / 2) if report_mdl is not None else None
         final_values = []
         true_detections = 0
@@ -403,7 +372,7 @@ def compute_preview_summary(raw_data, blank_cols, sample_cols, cfg):
             valid_samples += 1
             if blank_average is not None and value > blank_average:
                 true_detections += 1
-                final_values.append((value - blank_average) * conversion_factor * analyte_response_factor(compound, cfg))
+                final_values.append((value - blank_average) * conversion_factor)
             elif half_mdl is not None:
                 final_values.append(half_mdl)
 
@@ -442,14 +411,14 @@ def compute_preview_final_table(raw_data, blank_cols, sample_cols, cfg):
         blanks = _numeric_values(raw_data, compound, blank_cols)
         blank_average = statistics.mean(blanks) if blanks else None
         mdl = _preview_mdl(compound, blank_cols, cfg)
-        half_mdl = mdl / 2 * conversion_factor * analyte_response_factor(compound, cfg) if mdl is not None else None
+        half_mdl = mdl / 2 * conversion_factor if mdl is not None else None
         result = {'名称': compound}
         for _, column_letter, header in sample_cols:
             value = safe_float(raw_data.get(compound, {}).get(column_letter))
             if value is None:
                 result[header] = None
             elif blank_average is not None and value > blank_average:
-                result[header] = round6((value - blank_average) * conversion_factor * analyte_response_factor(compound, cfg))
+                result[header] = round6((value - blank_average) * conversion_factor)
             else:
                 result[header] = round6(half_mdl)
         rows.append(result)
@@ -1039,7 +1008,6 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
         ws.cell(row=row, column=1, value=comp); sty(ws.cell(row=row,column=1), S['cmpd'])
         s2r = comp2row_s2.get(comp)
         s3r = comp2row_s3.get(comp)
-        response_factor = analyte_response_factor(comp, cfg)
 
         # B: BLANK average
         cb = ws.cell(row=row, column=2)
@@ -1048,7 +1016,7 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
 
         # C: MDL in the report/sample unit (bottle MDL is converted once).
         cc = ws.cell(row=row, column=3)
-        if s2r: cc.value = f"='{blanks_name}'!{ml}{s2r}*$B$38*{response_factor:g}"; cc.number_format = '0.000000'
+        if s2r: cc.value = f"='{blanks_name}'!{ml}{s2r}*$B$38"; cc.number_format = '0.000000'
         sty(cc, S['data'])
 
         # Final concentration range (P~CX) and hidden detection-status range.
@@ -1098,8 +1066,8 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
                 formula = (
                     f"=IF('{bottle_name}'!{s3_cl}{s3r}=\"\",\"\","
                     f"IF('{bottle_name}'!{s3_cl}{s3r}>'{blanks_name}'!{al}{s2r},"
-                    f"('{bottle_name}'!{s3_cl}{s3r}-'{blanks_name}'!{al}{s2r})*$B$38*{response_factor:g},"
-                    f"'{blanks_name}'!{hl}{s2r}*{response_factor:g}))"
+                    f"('{bottle_name}'!{s3_cl}{s3r}-'{blanks_name}'!{al}{s2r})*$B$38,"
+                    f"'{blanks_name}'!{hl}{s2r}))"
                 )
                 ws.cell(row=row, column=col).value = formula
                 ws.cell(row=row, column=col).number_format = '0.000000'
@@ -1288,7 +1256,6 @@ def process(config=None, return_bytes=False):
     cfg['is_compounds'] = is_c
     cfg['ss_compounds'] = ss_c
     cfg['all_compounds'] = all_c
-    validate_is_correction_configuration(cfg, target)
     validate_blank_zero_configuration(raw_data, blanks, target, cfg)
 
     # 验证

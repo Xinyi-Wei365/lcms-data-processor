@@ -32,6 +32,14 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn("'en': 'Compound Roles'", source)
         self.assertIn("'en': 'Blank-zero MDL settings'", source)
 
+    def test_ui_keeps_one_is_correction_question(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertNotIn("'is_mode'", source)
+        self.assertNotIn('is_correction_mode', source)
+        self.assertNotIn('response_factors', source)
+        self.assertEqual(source.count("'is_correction':"), 1)
+
 
 if __name__ == '__main__':
     unittest.main()
