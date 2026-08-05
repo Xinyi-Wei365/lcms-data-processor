@@ -885,7 +885,7 @@ def build_sheet2(wb, raw_data, blank_cols, S, cfg):
     ws.cell(row=1, column=1).number_format = '0.000000'
 
     # Row 1 说明
-    ws.cell(row=1, column=9, value='原始空单元格不参与统计；未检出有效样品按 1/2 MDL 替代')
+    ws.cell(row=1, column=9, value='仅为检出率>50% ND取代')
     sty(ws.cell(row=1,column=9), S['yell'])
 
     # Row 2 表头

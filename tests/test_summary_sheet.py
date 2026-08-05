@@ -47,7 +47,7 @@ class SummarySheetTests(unittest.TestCase):
         self.assertEqual(ws['E4'].number_format, 'General')
         self.assertEqual(ws['F4'].number_format, 'General')
         blanks = wb['Blanks_MDL 空白基质检出限']
-        self.assertNotIn('>50%', str(blanks['I1'].value))
+        self.assertIn('>50%', str(blanks['I1'].value))
 
     def test_legacy_final_statistics_are_not_gated_by_df(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'demo_urine_qac_masshunter.xlsx'), 'rb') as source:
