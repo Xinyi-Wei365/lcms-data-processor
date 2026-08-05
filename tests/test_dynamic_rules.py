@@ -1,5 +1,8 @@
 import sys
 import unittest
+import io
+
+import openpyxl
 
 sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.dirname(__file__)))
 import process_lcms_data as processor
@@ -69,6 +72,36 @@ class DynamicRulesTests(unittest.TestCase):
     def test_selected_ss_concentration_is_resolved_by_exact_name(self):
         cfg = {'ss_spike_concentrations': {'Surrogate-X': 2.0}}
         self.assertEqual(processor.resolve_ss_spike('Surrogate-X', cfg), 2.0)
+
+    def test_custom_ss_entries_parse_name_and_individual_spike_concentration(self):
+        entries, errors = processor.parse_custom_ss_entries(
+            'd7-C12-BAC, 4\nMy Surrogate, 2.5'
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(entries, {'d7-C12-BAC': 4.0, 'My Surrogate': 2.5})
+
+    def test_custom_ss_entries_reject_invalid_lines(self):
+        entries, errors = processor.parse_custom_ss_entries('d7-C12-BAC\nX, 0')
+        self.assertEqual(entries, {})
+        self.assertEqual(len(errors), 2)
+
+    def test_custom_ss_is_moved_to_recovery_section_and_uses_its_own_spike(self):
+        raw = (
+            'Name,Ion,BLANK1,BLANK2,MS1,MS2,F1\n'
+            'C8-BAC,248>91,0.1,0.2,10,10,0.5\n'
+            'My Surrogate,300>100,0.1,0.2,2,4,2\n'
+        ).encode('utf-8')
+        output, _ = processor.process({
+            'input_bytes': raw, 'input_file': '', 'output_file': 'custom_ss.xlsx',
+            'is_compounds': [], 'ss_compounds': ['My Surrogate'],
+            'ss_spike_concentrations': {'My Surrogate': 2},
+        }, return_bytes=True)
+        workbook = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        matrix_sheet = workbook[next(name for name in workbook.sheetnames if name.startswith('Matrix spike'))]
+        row = next(row for row in range(1, matrix_sheet.max_row + 1)
+                   if matrix_sheet.cell(row, 1).value == 'My Surrogate')
+        self.assertEqual(matrix_sheet.cell(row, 6).value, 100)
+        self.assertEqual(matrix_sheet.cell(row, 7).value, 200)
 
     def test_unknown_compounds_are_sorted_by_chain_then_name(self):
         targets, _, _ = processor.classify_compounds(['C12-PFOS', 'C8-PFOS', 'C10-Other'])

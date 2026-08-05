@@ -12,6 +12,7 @@ import io
 from process_lcms_data import (
     process, read_raw, classify_compounds, resolve_roles,
     compute_preview_summary, compute_preview_final_table, detect_blank_zero_compounds,
+    parse_custom_ss_entries,
 )
 
 try:
@@ -95,6 +96,9 @@ T = {
     'blank_zero_header':    {'zh': 'blank=0 的 MDL 设置',                        'en': 'Blank-zero MDL settings'},
     'ss_spike_caption':     {'zh': 'SS 替代物理论加标浓度（分别设置）：',              'en': 'SS theoretical spike concentrations (set separately):'},
     'ss_spike_grid':        {'zh': 'SS 各自理论加标浓度（ppb）',                      'en': 'SS theoretical spike concentrations (ppb)'},
+    'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
+    'custom_ss_help':       {'zh': '每行输入“名称, 理论加标浓度(ppb)”。示例：d7-C12-BAC, 4。名称必须与上传文件的化合物名称一致；系统将其列为 SS，并按“SS 实测值 ÷ 该 SS 加标浓度 × 100%”计算。', 'en': 'One per line: “name, theoretical spike concentration (ppb)”. Example: d7-C12-BAC, 4. The name must match an imported compound; it will be treated as SS and recovery = measured SS ÷ its spike concentration × 100%.'},
+    'custom_ss_placeholder': {'zh': 'd7-C12-BAC, 4\nMy Surrogate, 2.5',             'en': 'd7-C12-BAC, 4\nMy Surrogate, 2.5'},
     'blank_zero_select':    {'zh': '选择 blank=0 的化合物',                         'en': 'Select blank=0 compounds'},
     'blank_zero_help':      {'zh': '对每个所选化合物输入标曲浓度和对应 S/N：MDL = 3 × 标曲浓度 ÷ S/N。', 'en': 'Enter calibration concentration and S/N for each selected compound: MDL = 3 × calibration concentration ÷ S/N.'},
     'calibration':          {'zh': '标曲浓度 (ppb)',                              'en': 'Calibration concentration (ppb)'},
@@ -286,6 +290,7 @@ if st.session_state.get('demo_active') and file_bytes:
 selected_is = []
 selected_ss = []
 ss_concentrations = {}
+custom_ss_text = ''
 mdl_overrides = {}
 mql_factor = 3.333333
 
@@ -325,6 +330,20 @@ if file_bytes:
         st.caption(t('roles_caption', L))
         selected_is = st.multiselect(t('is_select', L), all_c, default=is_c)
         selected_ss = st.multiselect(t('ss_select', L), all_c, default=ss_c)
+        custom_ss_text = st.text_area(
+            t('custom_ss', L),
+            value='',
+            placeholder=t('custom_ss_placeholder', L),
+            help=t('custom_ss_help', L),
+        )
+        custom_ss, custom_ss_errors = parse_custom_ss_entries(custom_ss_text)
+        for message in custom_ss_errors:
+            st.error(message)
+        missing_custom_ss = [name for name in custom_ss if name not in all_c]
+        if missing_custom_ss:
+            st.error('未在上传文件中找到自定义 SS：' + ', '.join(missing_custom_ss))
+        valid_custom_ss = [name for name in custom_ss if name in all_c]
+        selected_ss = list(dict.fromkeys(selected_ss + valid_custom_ss))
         overlap = set(selected_is) & set(selected_ss)
         if overlap:
             st.error(f'同一化合物不能同时作为 IS 与 SS：{sorted(overlap)}')
@@ -336,6 +355,8 @@ if file_bytes:
                     ss_concentrations[name] = st.number_input(
                         name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
                     )
+                    if name in custom_ss:
+                        ss_concentrations[name] = custom_ss[name]
 
         with st.expander(t('blank_zero_header', L)):
             detected_blank_zero = detect_blank_zero_compounds(raw_data, blanks)

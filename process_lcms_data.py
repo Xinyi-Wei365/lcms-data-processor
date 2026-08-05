@@ -240,6 +240,34 @@ def resolve_ss_spike(name, cfg):
     return safe_float(cfg.get('ss_spike_conc_ppb'))
 
 
+def parse_custom_ss_entries(text):
+    """Parse one user-defined surrogate per line: name, spike concentration.
+
+    Example: ``d7-C12-BAC, 4``.  The caller validates that each supplied name
+    actually exists in the imported MassHunter table before it is used.
+    """
+    entries = {}
+    errors = []
+    for line_number, raw_line in enumerate(str(text or '').splitlines(), 1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = [part.strip() for part in re.split(r'[,\t;]', line, maxsplit=1)]
+        if len(parts) != 2 or not parts[0]:
+            errors.append(f'Line {line_number}: enter "name, concentration".')
+            continue
+        name = normalize_analyte_name(parts[0])
+        concentration = safe_float(parts[1])
+        if concentration is None or concentration <= 0:
+            errors.append(f'Line {line_number}: spike concentration must be positive.')
+            continue
+        if name in entries:
+            errors.append(f'Line {line_number}: duplicate SS name "{name}".')
+            continue
+        entries[name] = concentration
+    return entries, errors
+
+
 def mdl_formula(name, blank_range, cfg):
     """Return the auditable Excel MDL formula for one analyte."""
     override = (cfg.get('mdl_overrides') or {}).get(name) or {}

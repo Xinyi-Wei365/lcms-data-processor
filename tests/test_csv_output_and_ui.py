@@ -40,6 +40,14 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertNotIn('response_factors', source)
         self.assertEqual(source.count("'is_correction':"), 1)
 
+    def test_ui_exposes_custom_ss_input_with_example_and_validation(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("'custom_ss'", source)
+        self.assertIn('d7-C12-BAC, 4', source)
+        self.assertIn('parse_custom_ss_entries(custom_ss_text)', source)
+        self.assertIn('missing_custom_ss', source)
+
 
 if __name__ == '__main__':
     unittest.main()
