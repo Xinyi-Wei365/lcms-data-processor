@@ -83,6 +83,9 @@ T = {
     'cf_locked':            {'zh': '（已锁定）',                                  'en': ' (Locked)'},
     'cf_editable':          {'zh': '（可手动覆盖）',                              'en': ' (Editable)'},
     'spike_conc':           {'zh': '基质加标浓度 (ppb)',                          'en': 'Matrix Spike Conc (ppb)'},
+    'ms_spike_header':      {'zh': '基质加标浓度（按 MS 列分别设置）',               'en': 'Matrix-spike concentrations (set per MS column)'},
+    'ms_spike_help':        {'zh': '每一个 MS 列使用自己的加标浓度计算回收率。示例：MS1 加 10 ppb、MS2 加 20 ppb，则分别输入 10 和 20；SS 仍只按 SS 自身浓度计算，IS 浓度仅记录。',
+                             'en': 'Each MS column uses its own spike concentration. Example: enter 10 for MS1 and 20 for MS2 when they were spiked at 10 and 20 ppb. SS still uses only its own concentration; IS values are record-only.'},
     'file_header':          {'zh': '📁 文件',                                    'en': '📁 File'},
     'upload_label':         {'zh': '上传原始数据（XLSX 或 CSV）',                  'en': 'Upload Raw Data (XLSX or CSV)'},
     'output_name':          {'zh': '输出文件名',                                  'en': 'Output Filename'},
@@ -309,6 +312,7 @@ selected_is = []
 selected_ss = []
 is_spike_concentrations = {}
 ss_concentrations = {}
+matrix_spike_concentrations = {}
 mdl_overrides = {}
 mql_factor = 3.333333
 layout_is_ready = False
@@ -340,6 +344,17 @@ if file_bytes:
         col1.metric(t('blank_cols', L), len(blanks))
         col2.metric(t('ms_cols', L), len(mss))
         col3.metric(t('sample_cols', L), len(samps))
+
+        if mss:
+            st.subheader(t('ms_spike_header', L))
+            st.caption(t('ms_spike_help', L))
+            ms_grid = st.columns(min(3, len(mss)))
+            for i, (_, _, header) in enumerate(mss):
+                with ms_grid[i % len(ms_grid)]:
+                    matrix_spike_concentrations[header] = st.number_input(
+                        f'{header} (ppb)', min_value=0.000001, value=float(spike_conc),
+                        step=1.0, key=f'ms_spike_conc_{header}',
+                    )
 
         st.subheader(t('roles_header', L))
         st.caption(t('roles_caption', L))
@@ -454,6 +469,7 @@ if process_btn and file_bytes:
             'extra_dilution': int(extra_dil),
             'conversion_factor': float(conversion_factor),
             'spike_conc_ppb': int(spike_conc),
+            'matrix_spike_concentrations': matrix_spike_concentrations,
             'is_compounds': selected_is,
             'is_spike_concentrations': is_spike_concentrations,
             'is_corrected': is_corrected,

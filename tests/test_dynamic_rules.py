@@ -138,6 +138,36 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual(matrix_sheet.cell(row, 10).value, '=ROUND(STDEV(F6:G6),0)')
         self.assertEqual(matrix_sheet.cell(row, 11).value, '=ROUND(J6/SQRT(COUNT(F6:G6)),0)')
 
+    def test_each_matrix_spike_column_uses_its_own_configured_spike_concentration(self):
+        raw = (
+            'Name,Ion,BLANK1,BLANK2,MS1,MS2,F1\n'
+            'C8-BAC,248>91,0.1,0.2,10,20,0.5\n'
+            'My Surrogate,300>100,0.1,0.2,4,4,2\n'
+            'My Internal Standard,301>101,0.1,0.2,4,4,4\n'
+        ).encode('utf-8')
+        output, _ = processor.process({
+            'input_bytes': raw, 'input_file': '', 'output_file': 'two_ms.xlsx',
+            'is_compounds': ['My Internal Standard'],
+            'is_spike_concentrations': {'My Internal Standard': 4},
+            'ss_compounds': ['My Surrogate'],
+            'ss_spike_concentrations': {'My Surrogate': 2},
+            'matrix_spike_concentrations': {'MS1': 10, 'MS2': 20},
+        }, return_bytes=True)
+        workbook = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        matrix_sheet = workbook[next(name for name in workbook.sheetnames if name.startswith('Matrix spike'))]
+        target_row = next(row for row in range(1, matrix_sheet.max_row + 1)
+                          if matrix_sheet.cell(row, 1).value == 'C8-BAC')
+        ss_row = next(row for row in range(1, matrix_sheet.max_row + 1)
+                      if matrix_sheet.cell(row, 1).value == 'My Surrogate')
+        # Target recovery uses MS1=10 ppb and MS2=20 ppb.  SS instead uses
+        # its own 2 ppb concentration for both columns.
+        self.assertEqual([matrix_sheet.cell(target_row, c).value for c in (6, 7)], [100, 100])
+        self.assertEqual([matrix_sheet.cell(ss_row, c).value for c in (6, 7)], [200, 200])
+        info = workbook['计算说明']
+        rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
+        self.assertIn(['Matrix spike concentration', 'MS1', '10 ppb', 'Used only for this matrix-spike recovery column.'], rows)
+        self.assertIn(['Matrix spike concentration', 'MS2', '20 ppb', 'Used only for this matrix-spike recovery column.'], rows)
+
     def test_non_qac_csv_end_to_end_keeps_type_order_and_blank_zero_snr_mdl(self):
         raw = (
             'Compound_Name,Ion Transition,BLANK1,BLANK2,MatrixSpike_1,Sample_01,Sample_02\n'

@@ -316,6 +316,26 @@ def resolve_ss_spike(name, cfg):
     return safe_float(cfg.get('ss_spike_conc_ppb'))
 
 
+def resolve_matrix_spike_concentration(ms_column, cfg):
+    """Return the spike concentration assigned to one matrix-spike column.
+
+    A map keyed by the imported MS header (for example ``MS1`` or
+    ``MatrixSpike_2``) takes precedence.  The legacy single concentration is
+    retained only as a default for callers that have not supplied per-column
+    values.
+    """
+    _, letter, header = ms_column
+    configured = cfg.get('matrix_spike_concentrations') or {}
+    for key in (header, letter):
+        value = safe_float(configured.get(key))
+        if value is not None and value > 0:
+            return value
+    value = safe_float(cfg.get('spike_conc_ppb', 10))
+    if value is None or value <= 0:
+        raise ValueError(f'{header}: matrix-spike concentration must be positive.')
+    return value
+
+
 def parse_custom_ss_entries(text):
     """Parse one user-defined surrogate per line: name, spike concentration.
 
@@ -722,7 +742,6 @@ def classify_compounds(compounds):
 def build_sheet1(wb, raw_data, ms_cols, S, cfg):
     ws = wb.create_sheet('Matrix spike  基质加标浓度')
     n_ms = len(ms_cols)
-    spike = cfg.get('spike_conc_ppb', 10)
     # 列布局: A | B~(n_ms) MS data | 空 | Recoveries标签 | n_ms个回收率% | 空 | avg | SD | SE
     # SS 的理论加标浓度仅作为处理参数，用于其独立回收率计算；不增加输出列。
     ms_start = 2
@@ -784,11 +803,12 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
         ws.cell(row=row, column=rec_lbl, value=None)
 
         # 回收率 % = (MS值/spike)*100, 四舍五入取整
-        for i, (_, cl, _) in enumerate(ms_cols):
+        for i, ms_col in enumerate(ms_cols):
+            _, cl, _ = ms_col
             v = safe_float(raw_data.get(comp, {}).get(cl))
             c = ws.cell(row=row, column=rec_start+i)
             if v is not None:
-                c.value = round_int((v / spike) * 100)
+                c.value = round_int((v / resolve_matrix_spike_concentration(ms_col, cfg)) * 100)
                 c.number_format = '0'
             sty(c, S['rec'])
 
@@ -861,7 +881,7 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
     ws.cell(row=row, column=note, value='此表格计算方法：回收率，用测得浓度除以加标浓度')
     sty(ws.cell(row=row,column=note), S['yell'])
     row += 1
-    ws.cell(row=row, column=note, value=f'此处实验基质加标浓度都是{spike}，所以计算回收率时每个化合物的测得浓度除以{spike}')
+    ws.cell(row=row, column=note, value='每一个 matrix spike 列使用该列设置的加标浓度；例如 MS1=10 ppb、MS2=20 ppb 时，分别以测得浓度÷10 和测得浓度÷20 计算回收率。SS 仍只除以其自身理论加标浓度。')
     sty(ws.cell(row=row,column=note), S['yell'])
 
     ws.row_dimensions[1].height = 19.5
@@ -1305,7 +1325,7 @@ def build_info_sheet(wb, S, cfg):
         ['LC-MS/MS 数据处理说明 v2'],
         ['区域','公式/规则','来源','说明'],
         ['Sheet1: MS数据','从原始数据含"MS"列提取','原始数据',f'单位:{cfg["masshunter_unit"]}'],
-        ['Sheet1: 回收率%',f'MS值÷{cfg["spike_conc_ppb"]}×100,四舍五入取整','Sheet1 MS列','单位:%'],
+        ['Sheet1: 回收率%','MS值÷对应 MS 列的加标浓度×100,四舍五入取整','Sheet1 MS列','单位:%；每一个 MS 列可设置不同浓度'],
         ['Sheet1: avg/SD/SE','AVERAGE/STDEV/SD/SQRT(COUNT) 公式','Sheet1 回收率%列','基于回收率百分比值'],
         ['Sheet2: Blank avg','=AVERAGE(空白) 公式','Sheet2 B~G列',f'单位:bottle {cfg["masshunter_unit"]}'],
         ['Sheet2: MDL','=3*STDEVA(空白) 公式','Sheet2 J列',f'单位:bottle {cfg["masshunter_unit"]}'],
@@ -1326,6 +1346,13 @@ def build_info_sheet(wb, S, cfg):
             rows.append([
                 'IS addition record', name, f'{value:g} ppb',
                 'Recorded only; IS correction applied: ' + ('yes' if is_corrected else 'no') + '. Does not change concentration formulas.',
+            ])
+    for header, value in (cfg.get('matrix_spike_concentrations') or {}).items():
+        value = safe_float(value)
+        if value is not None and value > 0:
+            rows.append([
+                'Matrix spike concentration', header, f'{value:g} ppb',
+                'Used only for this matrix-spike recovery column.',
             ])
     for r, rd in enumerate(rows, 1):
         for c, val in enumerate(rd, 1):
@@ -1383,6 +1410,10 @@ def process(config=None, return_bytes=False):
     if not src:
         raise ValueError('No input file or data provided')
     raw_data, blanks, mss, samps, detected_target, detected_is, detected_ss, detected_all = read_raw(src)
+    configured_ms = dict(cfg.get('matrix_spike_concentrations') or {})
+    for _, _, header in mss:
+        configured_ms.setdefault(header, cfg.get('spike_conc_ppb', 10))
+    cfg['matrix_spike_concentrations'] = configured_ms
     target, is_c, ss_c, all_c = configured_compound_lists(cfg, detected_all, detected_is, detected_ss)
     cfg['target_compounds'] = target
     cfg['is_compounds'] = is_c
