@@ -885,7 +885,7 @@ def build_sheet2(wb, raw_data, blank_cols, S, cfg):
     ws.cell(row=1, column=1).number_format = '0.000000'
 
     # Row 1 说明
-    ws.cell(row=1, column=9, value='仅为检出率>50% ND取代')
+    ws.cell(row=1, column=9, value='原始空单元格不参与统计；未检出有效样品按 1/2 MDL 替代')
     sty(ws.cell(row=1,column=9), S['yell'])
 
     # Row 2 表头
@@ -1261,7 +1261,9 @@ def build_summary_sheet(wb, final_sheet, blank_info, sample_cols, S, cfg):
         sample_range = f"'{final_name}'!{first_letter}{final_row}:{last_letter}{final_row}"
         ws.cell(row=row, column=1, value=compound)
         ws.cell(row=row, column=2, value=extract_chain_length(compound) or 'NA')
-        ws.cell(row=row, column=3, value=f'={significant_digits_formula(f"\'{final_name}\'!D{final_row}")}')
+        # DF is displayed directly as a percentage number (for example 33.3),
+        # consistent with the online preview and the "DF (%)" heading.
+        ws.cell(row=row, column=3, value=f'={significant_digits_formula(f"\'{final_name}\'!D{final_row}*100")}')
         # The result sheet summarizes all final concentrations independently
         # from DF. Final values include approved 1/2 MDL substitutions.
         median_formula = significant_digits_formula(f'MEDIAN({sample_range})')
@@ -1281,9 +1283,11 @@ def build_summary_sheet(wb, final_sheet, blank_info, sample_cols, S, cfg):
         ws.cell(row=row, column=6, value=f'={significant_digits_formula(f"({report_mdl_formula[1:]})*{mql_factor}")}')
         for col in range(1, 7):
             sty(ws.cell(row=row, column=col), S['cmpd'] if col in (1, 2) else S['stat'])
-        ws.cell(row=row, column=3).number_format = '0.0%'
-        for col in (5, 6):
-            ws.cell(row=row, column=col).number_format = '0.000000'
+        # Each formula has already rounded the result to three significant
+        # digits. General avoids a fixed six-decimal display when users paste
+        # the compact descriptive statistics into manuscripts.
+        for col in (3, 5, 6):
+            ws.cell(row=row, column=col).number_format = 'General'
 
     for col, width in enumerate([30, 12, 12, 28, 14, 14], 1):
         ws.column_dimensions[get_column_letter(col)].width = width
