@@ -1318,6 +1318,15 @@ def build_info_sheet(wb, S, cfg):
         ['换算因子位置','Sheet2 $A$1 + Sheet4 $B$38','','两处均可独立修改'],
         ['本次参数',f'样本:{cfg["sample_type"]} 取样:{cfg["sample_volume_ml"]}mL 定容:{cfg["final_volume_ml"]}mL 换算因子:{cfg["conversion_factor"]}','',''],
     ]
+    is_corrected = bool(cfg.get('is_corrected', False))
+    configured_is = cfg.get('is_spike_concentrations') or {}
+    for name in cfg.get('is_compounds', []):
+        value = safe_float(configured_is.get(name))
+        if value is not None and value > 0:
+            rows.append([
+                'IS addition record', name, f'{value:g} ppb',
+                'Recorded only; IS correction applied: ' + ('yes' if is_corrected else 'no') + '. Does not change concentration formulas.',
+            ])
     for r, rd in enumerate(rows, 1):
         for c, val in enumerate(rd, 1):
             cell = ws.cell(row=r, column=c, value=val)
@@ -1340,6 +1349,13 @@ def export_csv_bytes(raw_data, blank_cols, sample_cols, cfg):
     for item in compute_preview_final_table(raw_data, blank_cols, sample_cols, preview_cfg):
         name = item.get('名称') or item.get('鍚嶇О')
         rows.append([name] + [item.get(header) for header in sample_headers])
+    rows.append([])
+    rows.append(['IS addition record', 'Addition concentration (ppb)', 'IS correction applied', 'Note'])
+    configured_is = cfg.get('is_spike_concentrations') or {}
+    for name in cfg.get('is_compounds', []):
+        value = safe_float(configured_is.get(name))
+        if value is not None and value > 0:
+            rows.append([name, value, 'yes' if cfg.get('is_corrected', False) else 'no', 'Recorded only; does not change concentration formulas.'])
     text = io.StringIO()
     csv.writer(text, lineterminator='\n').writerows(rows)
     return text.getvalue().encode('utf-8-sig')

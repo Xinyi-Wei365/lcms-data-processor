@@ -48,6 +48,14 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn('parse_custom_ss_entries(custom_ss_text)', source)
         self.assertIn('missing_custom_ss', source)
 
+    def test_ui_exposes_custom_is_concentration_input_and_keeps_correction_separate(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("'custom_is'", source)
+        self.assertIn('parse_custom_ss_entries(custom_is_text)', source)
+        self.assertIn('is_spike_concentrations', source)
+        self.assertIn("'is_corrected': is_corrected", source)
+
     def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
@@ -88,6 +96,24 @@ class CsvOutputAndUiTests(unittest.TestCase):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn('compound_classification_rows(all_c, selected_is, selected_ss)', source)
+
+    def test_is_addition_concentrations_are_recorded_without_changing_final_concentration_rule(self):
+        raw = (
+            'Name,Ion,BLANK1,BLANK2,MS1,F1\n'
+            'C8-BAC,248>91,0.1,0.2,10,0.5\n'
+            'My Internal Standard,300>100,0.1,0.2,4,4\n'
+        ).encode('utf-8')
+        output, _ = processor.process({
+            'input_bytes': raw, 'input_file': '', 'output_file': 'is_record.xlsx',
+            'is_compounds': ['My Internal Standard'],
+            'is_spike_concentrations': {'My Internal Standard': 4},
+            'is_corrected': True,
+        }, return_bytes=True)
+        import openpyxl
+        workbook = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        info = workbook['计算说明']
+        rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
+        self.assertIn(['IS addition record', 'My Internal Standard', '4 ppb', 'Recorded only; IS correction applied: yes. Does not change concentration formulas.'], rows)
 
 
 if __name__ == '__main__':

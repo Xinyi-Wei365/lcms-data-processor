@@ -94,9 +94,15 @@ T = {
     'ss_select':            {'zh': 'SS 替代物（可多选）',                          'en': 'SS surrogates'},
     'blank_zero_header':    {'zh': 'blank=0 的 MDL 设置',                        'en': 'Blank-zero MDL settings'},
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
+    'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
     'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
     'custom_ss_help':       {'zh': '每行输入“名称, 理论加标浓度(ppb)”。示例：d7-C12-BAC, 4。名称必须与上传文件的化合物名称一致；系统将其列为 SS，并按“SS 实测值 ÷ 该 SS 加标浓度 × 100%”计算。', 'en': 'One per line: “name, theoretical spike concentration (ppb)”. Example: d7-C12-BAC, 4. The name must match an imported compound; it will be treated as SS and recovery = measured SS ÷ its spike concentration × 100%.'},
     'custom_ss_placeholder': {'zh': 'd7-C12-BAC, 4\nMy Surrogate, 2.5',             'en': 'd7-C12-BAC, 4\nMy Surrogate, 2.5'},
+    'custom_is':            {'zh': '自定义 IS 内标（可选）',                         'en': 'Custom IS internal standards (optional)'},
+    'custom_is_help':       {'zh': '每行输入“名称, 加入浓度(ppb)”。名称必须与上传文件一致；该信息只记录在输出文件中，不会改变浓度计算。是否使用 IS 校正仍由上方“数据是否经过内标（IS）校正？”决定。',
+                             'en': 'One per line: “name, addition concentration (ppb)”. Names must match the uploaded file. Values are recorded in output only and do not alter concentration calculations; IS correction is controlled solely by the question above.'},
+    'custom_is_placeholder': {'zh': 'C13-Internal Standard, 4\nMy Internal Standard, 2.5',
+                              'en': 'C13-Internal Standard, 4\nMy Internal Standard, 2.5'},
     'blank_zero_select':    {'zh': '选择 blank=0 的化合物',                         'en': 'Select blank=0 compounds'},
     'blank_zero_help':      {'zh': '对每个所选化合物输入标曲浓度和对应 S/N：MDL = 3 × 标曲浓度 ÷ S/N。', 'en': 'Enter calibration concentration and S/N for each selected compound: MDL = 3 × calibration concentration ÷ S/N.'},
     'calibration':          {'zh': '标曲浓度 (ppb)',                              'en': 'Calibration concentration (ppb)'},
@@ -215,6 +221,16 @@ with st.sidebar:
         label_visibility='collapsed',
     )
 
+    st.subheader(t('custom_is', L))
+    st.caption(t('custom_is_help', L))
+    custom_is_text = st.text_area(
+        t('custom_is', L),
+        value='',
+        placeholder=t('custom_is_placeholder', L),
+        key='custom_is_text',
+        label_visibility='collapsed',
+    )
+
     st.divider()
     st.header(t('file_header', L))
     uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx", "xls", "csv", "tsv"])
@@ -291,6 +307,7 @@ if st.session_state.get('demo_active') and file_bytes:
 
 selected_is = []
 selected_ss = []
+is_spike_concentrations = {}
 ss_concentrations = {}
 mdl_overrides = {}
 mql_factor = 3.333333
@@ -328,6 +345,14 @@ if file_bytes:
         st.caption(t('roles_caption', L))
         selected_is = st.multiselect(t('is_select', L), all_c, default=is_c)
         selected_ss = st.multiselect(t('ss_select', L), all_c, default=ss_c)
+        custom_is, custom_is_errors = parse_custom_ss_entries(custom_is_text)
+        for message in custom_is_errors:
+            st.error(message.replace('SS', 'IS'))
+        missing_custom_is = [name for name in custom_is if name not in all_c]
+        if missing_custom_is:
+            st.error('未在上传文件中找到自定义 IS：' + ', '.join(missing_custom_is))
+        valid_custom_is = [name for name in custom_is if name in all_c]
+        selected_is = list(dict.fromkeys(selected_is + valid_custom_is))
         custom_ss, custom_ss_errors = parse_custom_ss_entries(custom_ss_text)
         for message in custom_ss_errors:
             st.error(message)
@@ -356,6 +381,19 @@ if file_bytes:
                         ss_concentrations[name] = st.number_input(
                             name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
                         )
+        if selected_is:
+            st.write(t('is_spike_grid', L))
+            is_grid = st.columns(min(3, len(selected_is)))
+            for i, name in enumerate(selected_is):
+                with is_grid[i % len(is_grid)]:
+                    is_spike_concentrations[name] = st.number_input(
+                        name,
+                        min_value=0.000001,
+                        value=float(custom_is.get(name, 4.0)),
+                        step=1.0,
+                        key=f'is_conc_{name}',
+                        disabled=name in custom_is,
+                    )
 
         # This table reflects the final user-confirmed IS/SS selection, not
         # merely the name-pattern auto-detection shown immediately on import.
@@ -417,6 +455,8 @@ if process_btn and file_bytes:
             'conversion_factor': float(conversion_factor),
             'spike_conc_ppb': int(spike_conc),
             'is_compounds': selected_is,
+            'is_spike_concentrations': is_spike_concentrations,
+            'is_corrected': is_corrected,
             'ss_compounds': selected_ss,
             'ss_spike_concentrations': ss_concentrations,
             'mdl_overrides': mdl_overrides,
