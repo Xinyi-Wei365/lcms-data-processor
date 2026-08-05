@@ -43,6 +43,19 @@ class InputValidationTests(unittest.TestCase):
         self.assertTrue(any('BLANK' in message for message in report['errors']))
         self.assertTrue(any('sample' in message.lower() for message in report['errors']))
 
+    def test_process_rejects_a_file_without_required_blank_or_sample_columns(self):
+        raw = (
+            'Compound Name,Transition,MatrixSpike_1\n'
+            'C8-PFAS,499>80,1.0\n'
+        ).encode('utf-8')
+
+        with self.assertRaisesRegex(ValueError, 'BLANK|sample'):
+            processor.process({
+                'input_bytes': raw,
+                'input_file': '',
+                'output_file': 'invalid.xlsx',
+            }, return_bytes=True)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1368,6 +1368,9 @@ def process(config=None, return_bytes=False):
     cfg['is_compounds'] = is_c
     cfg['ss_compounds'] = ss_c
     cfg['all_compounds'] = all_c
+    layout_report = validate_input_layout(blanks, mss, samps, target, is_c, ss_c)
+    if not layout_report['ready']:
+        raise ValueError('Input layout is not processable: ' + '; '.join(layout_report['errors']))
     validate_blank_zero_configuration(raw_data, blanks, target, cfg)
 
     # 验证

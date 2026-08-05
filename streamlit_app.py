@@ -294,6 +294,7 @@ selected_ss = []
 ss_concentrations = {}
 mdl_overrides = {}
 mql_factor = 3.333333
+layout_is_ready = False
 
 if file_bytes:
     st.subheader(t('raw_preview', L))
@@ -301,6 +302,7 @@ if file_bytes:
         raw_data, blanks, mss, samps, target, is_c, ss_c, all_c = read_raw(file_bytes)
 
         layout_report = validate_input_layout(blanks, mss, samps, target, is_c, ss_c)
+        layout_is_ready = layout_report['ready']
         if layout_report['ready']:
             st.success(f"文件格式检查通过：{layout_report['summary']}")
         else:
@@ -402,7 +404,7 @@ if file_bytes:
 # 处理按钮
 # ============================================================
 st.divider()
-process_btn = st.button(t('process_btn', L), type="primary", disabled=(file_bytes is None), use_container_width=True)
+process_btn = st.button(t('process_btn', L), type="primary", disabled=(file_bytes is None or not layout_is_ready), use_container_width=True)
 
 if process_btn and file_bytes:
     with st.spinner(t('processing', L)):
