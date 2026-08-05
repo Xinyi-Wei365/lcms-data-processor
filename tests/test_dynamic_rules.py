@@ -100,12 +100,15 @@ class DynamicRulesTests(unittest.TestCase):
         matrix_sheet = workbook[next(name for name in workbook.sheetnames if name.startswith('Matrix spike'))]
         row = next(row for row in range(1, matrix_sheet.max_row + 1)
                    if matrix_sheet.cell(row, 1).value == 'My Surrogate')
-        self.assertEqual(matrix_sheet.cell(row, 4).value, 2)
-        self.assertEqual(matrix_sheet.cell(row, 7).value, 100)
-        self.assertEqual(matrix_sheet.cell(row, 8).value, 200)
-        self.assertEqual(matrix_sheet.cell(row, 10).value, '=ROUND(AVERAGE(G6:H6),0)')
-        self.assertEqual(matrix_sheet.cell(row, 11).value, '=ROUND(STDEV(G6:H6),0)')
-        self.assertEqual(matrix_sheet.cell(row, 12).value, '=ROUND(K6/SQRT(COUNT(G6:H6)),0)')
+        # The SS spike concentration is a processing parameter, not an
+        # additional worksheet column.  For two MS replicates, SS recovery
+        # values are F/G and the requested summary columns are I/J/K.
+        self.assertNotIn('SS spike conc.', [cell.value for cell in matrix_sheet[1]])
+        self.assertEqual(matrix_sheet.cell(row, 6).value, 100)
+        self.assertEqual(matrix_sheet.cell(row, 7).value, 200)
+        self.assertEqual(matrix_sheet.cell(row, 9).value, '=ROUND(AVERAGE(F6:G6),0)')
+        self.assertEqual(matrix_sheet.cell(row, 10).value, '=ROUND(STDEV(F6:G6),0)')
+        self.assertEqual(matrix_sheet.cell(row, 11).value, '=ROUND(J6/SQRT(COUNT(F6:G6)),0)')
 
     def test_unknown_compounds_are_sorted_by_chain_then_name(self):
         targets, _, _ = processor.classify_compounds(['C12-PFOS', 'C8-PFOS', 'C10-Other'])

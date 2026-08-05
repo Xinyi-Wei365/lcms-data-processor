@@ -647,13 +647,10 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
     ws = wb.create_sheet('Matrix spike  基质加标浓度')
     n_ms = len(ms_cols)
     spike = cfg.get('spike_conc_ppb', 10)
-    ss_spike_d7 = cfg.get('ss_spike_d7_ppb', 4)
-    ss_spike_d9 = cfg.get('ss_spike_d9_ppb', 4)
-
-    # 列布局: A | B~(n_ms) MS data | SS spike | 空 | Recoveries标签 | n_ms个回收率% | 空 | avg | SD | SE
+    # 列布局: A | B~(n_ms) MS data | 空 | Recoveries标签 | n_ms个回收率% | 空 | avg | SD | SE
+    # SS 的理论加标浓度仅作为处理参数，用于其独立回收率计算；不增加输出列。
     ms_start = 2
-    ss_spike_col = ms_start + n_ms   # SS 理论加标浓度（仅 SS 行填写）
-    mid1 = ss_spike_col + 1          # 空列
+    mid1 = ms_start + n_ms           # 空列
     rec_lbl = mid1 + 1               # "Recoveries"
     rec_start = rec_lbl + 1          # 回收率% 起始
     mid2 = rec_start + n_ms          # 空列
@@ -666,7 +663,6 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
     ws.cell(row=1, column=1, value='化合物方法'); sty(ws.cell(row=1,column=1), S['hdrL'])
     for i in range(n_ms):
         ws.cell(row=1, column=ms_start+i, value=f'matrix spike_{i+1}'); sty(ws.cell(row=1,column=ms_start+i), S['hdr'])
-    ws.cell(row=1, column=ss_spike_col, value='SS spike conc.'); sty(ws.cell(row=1,column=ss_spike_col), S['hdr'])
     ws.cell(row=1, column=mid1, value=None)
     ws.cell(row=1, column=rec_lbl, value='Recoveries'); sty(ws.cell(row=1,column=rec_lbl), S['hdr'])
     for i in range(n_ms):
@@ -680,7 +676,6 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
     ws.cell(row=2, column=1, value='分组'); sty(ws.cell(row=2,column=1), S['hdr'])
     for i in range(n_ms):
         ws.cell(row=2, column=ms_start+i, value='ppb'); sty(ws.cell(row=2,column=ms_start+i), S['hdr'])
-    ws.cell(row=2, column=ss_spike_col, value='ppb'); sty(ws.cell(row=2,column=ss_spike_col), S['hdr'])
     ws.cell(row=2, column=mid1, value=None)
     ws.cell(row=2, column=rec_lbl, value=None)
     for i in range(n_ms):
@@ -709,7 +704,6 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
                 c.value = round6(v); c.number_format = '0.000000'
             sty(c, S['data'])
 
-        ws.cell(row=row, column=ss_spike_col, value=None); sty(ws.cell(row=row,column=ss_spike_col), S['data'])
         ws.cell(row=row, column=mid1, value=None)
         ws.cell(row=row, column=rec_lbl, value=None)
 
@@ -754,9 +748,6 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
         this_ss_spike = resolve_ss_spike(ss, cfg)
         if this_ss_spike is None or this_ss_spike <= 0:
             raise ValueError(f'{ss}: missing positive SS spike concentration.')
-        spike_cell = ws.cell(row=row, column=ss_spike_col, value=this_ss_spike)
-        spike_cell.number_format = '0.000000'
-        sty(spike_cell, S['gold'])
         # MS数据列：照抄原始浓度（不除以任何值）
         for i, (_, cl, _) in enumerate(ms_cols):
             v = safe_float(raw_data.get(ss, {}).get(cl))
