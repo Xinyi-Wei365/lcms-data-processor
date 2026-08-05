@@ -203,6 +203,16 @@ with st.sidebar:
     )
     spike_conc = st.number_input(t('spike_conc', L), value=10, step=1)
 
+    st.subheader(t('custom_ss', L))
+    st.caption(t('custom_ss_help', L))
+    custom_ss_text = st.text_area(
+        t('custom_ss', L),
+        value='',
+        placeholder=t('custom_ss_placeholder', L),
+        key='custom_ss_text',
+        label_visibility='collapsed',
+    )
+
     st.divider()
     st.header(t('file_header', L))
     uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx", "xls", "csv", "tsv"])
@@ -280,7 +290,6 @@ if st.session_state.get('demo_active') and file_bytes:
 selected_is = []
 selected_ss = []
 ss_concentrations = {}
-custom_ss_text = ''
 mdl_overrides = {}
 mql_factor = 3.333333
 
@@ -320,12 +329,6 @@ if file_bytes:
         st.caption(t('roles_caption', L))
         selected_is = st.multiselect(t('is_select', L), all_c, default=is_c)
         selected_ss = st.multiselect(t('ss_select', L), all_c, default=ss_c)
-        custom_ss_text = st.text_area(
-            t('custom_ss', L),
-            value='',
-            placeholder=t('custom_ss_placeholder', L),
-            help=t('custom_ss_help', L),
-        )
         custom_ss, custom_ss_errors = parse_custom_ss_entries(custom_ss_text)
         for message in custom_ss_errors:
             st.error(message)

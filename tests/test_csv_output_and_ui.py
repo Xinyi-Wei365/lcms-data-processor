@@ -56,6 +56,15 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertNotIn("'ss_spike_d7_ppb':", source)
         self.assertNotIn("'ss_spike_d9_ppb':", source)
 
+    def test_custom_ss_input_is_visible_in_sidebar_before_file_upload(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        sidebar_start = source.index('with st.sidebar:')
+        main_region = source.index('# 主区域')
+        sidebar_source = source[sidebar_start:main_region]
+        self.assertIn('custom_ss_text = st.text_area(', sidebar_source)
+        self.assertIn("key='custom_ss_text'", sidebar_source)
+
 
 if __name__ == '__main__':
     unittest.main()
