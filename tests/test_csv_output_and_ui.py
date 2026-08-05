@@ -48,6 +48,14 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn('parse_custom_ss_entries(custom_ss_text)', source)
         self.assertIn('missing_custom_ss', source)
 
+    def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertNotIn("ss_spike_d7 = st.number_input", source)
+        self.assertNotIn("ss_spike_d9 = st.number_input", source)
+        self.assertNotIn("'ss_spike_d7_ppb':", source)
+        self.assertNotIn("'ss_spike_d9_ppb':", source)
+
 
 if __name__ == '__main__':
     unittest.main()

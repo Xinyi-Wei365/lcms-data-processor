@@ -81,9 +81,6 @@ T = {
     'cf_locked':            {'zh': '（已锁定）',                                  'en': ' (Locked)'},
     'cf_editable':          {'zh': '（可手动覆盖）',                              'en': ' (Editable)'},
     'spike_conc':           {'zh': '基质加标浓度 (ppb)',                          'en': 'Matrix Spike Conc (ppb)'},
-    'ss_spike_conc':        {'zh': 'SS 替代物加标浓度 (ppb)',                     'en': 'SS Surrogate Spike Conc (ppb)'},
-    'ss_spike_help':        {'zh': '替代物自身的理论加标浓度，可能不同于基质加标浓度',
-                             'en': 'Theoretical spike concentration of surrogates, may differ from matrix spike conc'},
     'file_header':          {'zh': '📁 文件',                                    'en': '📁 File'},
     'upload_label':         {'zh': '上传原始数据（XLSX 或 CSV）',                  'en': 'Upload Raw Data (XLSX or CSV)'},
     'output_name':          {'zh': '输出文件名',                                  'en': 'Output Filename'},
@@ -94,8 +91,7 @@ T = {
     'is_select':            {'zh': 'IS 内标（可多选）',                            'en': 'IS internal standards'},
     'ss_select':            {'zh': 'SS 替代物（可多选）',                          'en': 'SS surrogates'},
     'blank_zero_header':    {'zh': 'blank=0 的 MDL 设置',                        'en': 'Blank-zero MDL settings'},
-    'ss_spike_caption':     {'zh': 'SS 替代物理论加标浓度（分别设置）：',              'en': 'SS theoretical spike concentrations (set separately):'},
-    'ss_spike_grid':        {'zh': 'SS 各自理论加标浓度（ppb）',                      'en': 'SS theoretical spike concentrations (ppb)'},
+    'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
     'custom_ss_help':       {'zh': '每行输入“名称, 理论加标浓度(ppb)”。示例：d7-C12-BAC, 4。名称必须与上传文件的化合物名称一致；系统将其列为 SS，并按“SS 实测值 ÷ 该 SS 加标浓度 × 100%”计算。', 'en': 'One per line: “name, theoretical spike concentration (ppb)”. Example: d7-C12-BAC, 4. The name must match an imported compound; it will be treated as SS and recovery = measured SS ÷ its spike concentration × 100%.'},
     'custom_ss_placeholder': {'zh': 'd7-C12-BAC, 4\nMy Surrogate, 2.5',             'en': 'd7-C12-BAC, 4\nMy Surrogate, 2.5'},
@@ -206,12 +202,6 @@ with st.sidebar:
         disabled=is_corrected
     )
     spike_conc = st.number_input(t('spike_conc', L), value=10, step=1)
-    st.caption(t('ss_spike_caption', L))
-    col_ss1, col_ss2 = st.columns(2)
-    with col_ss1:
-        ss_spike_d7 = st.number_input('d7-C12-BAC (ppb)', value=4, step=1)
-    with col_ss2:
-        ss_spike_d9 = st.number_input('d9-C10-ATMAC (ppb)', value=4, step=1)
 
     st.divider()
     st.header(t('file_header', L))
@@ -407,8 +397,6 @@ if process_btn and file_bytes:
             'extra_dilution': int(extra_dil),
             'conversion_factor': float(conversion_factor),
             'spike_conc_ppb': int(spike_conc),
-            'ss_spike_d7_ppb': int(ss_spike_d7),
-            'ss_spike_d9_ppb': int(ss_spike_d9),
             'is_compounds': selected_is,
             'ss_compounds': selected_ss,
             'ss_spike_concentrations': ss_concentrations,
