@@ -317,13 +317,6 @@ if file_bytes:
         col3.metric(t('is_cmpd', L), len(is_c))
         col4.metric(t('ss_cmpd', L), len(ss_c))
 
-        with st.expander(t('view_classify', L)):
-            st.write(f"**{t('target_label', L)}**:", ", ".join(target) if target else "-")
-            st.write(f"**{t('is_label', L)}**:", ", ".join(is_c) if is_c else "-")
-            st.write(f"**{t('ss_label', L)}**:", ", ".join(ss_c) if ss_c else "-")
-            classification_rows = compound_classification_rows(all_c, is_c, ss_c)
-            st.dataframe(pd.DataFrame(classification_rows), use_container_width=True, hide_index=True)
-
         col1, col2, col3 = st.columns(3)
         col1.metric(t('blank_cols', L), len(blanks))
         col2.metric(t('ms_cols', L), len(mss))
@@ -349,11 +342,28 @@ if file_bytes:
             ss_grid = st.columns(min(3, len(selected_ss)))
             for i, name in enumerate(selected_ss):
                 with ss_grid[i % len(ss_grid)]:
-                    ss_concentrations[name] = st.number_input(
-                        name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
-                    )
                     if name in custom_ss:
-                        ss_concentrations[name] = custom_ss[name]
+                        # A custom SS line is the source of truth for its own
+                        # spike concentration.  Show the exact calculation
+                        # value read-only so displayed and used values match.
+                        ss_concentrations[name] = st.number_input(
+                            name, min_value=0.000001, value=float(custom_ss.get(name, 4.0)),
+                            step=1.0, key=f'custom_ss_conc_{name}', disabled=True,
+                        )
+                    else:
+                        ss_concentrations[name] = st.number_input(
+                            name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
+                        )
+
+        # This table reflects the final user-confirmed IS/SS selection, not
+        # merely the name-pattern auto-detection shown immediately on import.
+        with st.expander(t('view_classify', L)):
+            roles_for_display = resolve_roles(all_c, selected_is, selected_ss)
+            st.write(f"**{t('target_label', L)}**:", ", ".join(roles_for_display['target_compounds']) if roles_for_display['target_compounds'] else "-")
+            st.write(f"**{t('is_label', L)}**:", ", ".join(roles_for_display['is_compounds']) if roles_for_display['is_compounds'] else "-")
+            st.write(f"**{t('ss_label', L)}**:", ", ".join(roles_for_display['ss_compounds']) if roles_for_display['ss_compounds'] else "-")
+            classification_rows = compound_classification_rows(all_c, selected_is, selected_ss)
+            st.dataframe(pd.DataFrame(classification_rows), use_container_width=True, hide_index=True)
 
         with st.expander(t('blank_zero_header', L)):
             detected_blank_zero = detect_blank_zero_compounds(raw_data, blanks)
