@@ -78,6 +78,82 @@ class InputDetectionTests(unittest.TestCase):
         self.assertEqual(targets, ['C8-BAC'])
         self.assertIn('C8-BAC', raw)
 
+    def test_masshunter_style_analyte_name_and_transition_headers_are_recognized(self):
+        csv_bytes = (
+            'Analyte Name,Transition,Blank 1,Matrix Spike 1,Sample 01\n'
+            'C8-PFAS,499>80,0.01,1.0,0.2\n'
+        ).encode('utf-8')
+
+        raw, blanks, mss, samples, targets, _, _, _ = processor.read_raw(csv_bytes)
+
+        self.assertIn('C8-PFAS', raw)
+        self.assertEqual([item[2] for item in blanks], ['Blank 1'])
+        self.assertEqual([item[2] for item in mss], ['Matrix Spike 1'])
+        self.assertEqual([item[2] for item in samples], ['Sample 01'])
+        self.assertEqual(targets, ['C8-PFAS'])
+
+    def test_utf16_csv_export_is_read_without_misclassifying_headers(self):
+        csv_bytes = (
+            'Compound Name,Transition,BLANK1,MS1,F1\n'
+            'C10-PFOS,499>80,0.01,1.0,0.2\n'
+        ).encode('utf-16')
+
+        raw, blanks, mss, samples, targets, _, _, _ = processor.read_raw(csv_bytes)
+
+        self.assertIn('C10-PFOS', raw)
+        self.assertEqual(len(blanks), 1)
+        self.assertEqual(len(mss), 1)
+        self.assertEqual([item[2] for item in samples], ['F1'])
+        self.assertEqual(targets, ['C10-PFOS'])
+
+    def test_legacy_xls_file_is_read_and_keeps_non_qac_analytes(self):
+        frame = processor.pd.DataFrame([
+            ['Compound Name', 'Transition', 'BLANK1', 'MS1', 'Sample 1'],
+            ['C8-PFAS', '499>80', 0.01, 1.0, 0.2],
+        ])
+        output = io.BytesIO()
+        try:
+            frame.to_excel(output, index=False, header=False, engine='xlwt')
+        except (ModuleNotFoundError, ValueError):
+            self.skipTest('legacy XLS writer is not installed in this runtime')
+
+        raw, blanks, mss, samples, targets, _, _, _ = processor.read_raw(output.getvalue())
+
+        self.assertIn('C8-PFAS', raw)
+        self.assertEqual(len(blanks), 1)
+        self.assertEqual(len(mss), 1)
+        self.assertEqual(targets, ['C8-PFAS'])
+
+    def test_converted_xlsx_style_underscored_headers_are_recognized(self):
+        csv_bytes = (
+            'Compound_Name,Ion Transition,Method Blank 1,MatrixSpike_1,Sample_01\n'
+            'C8-PFAS,499>80,0.01,1.0,0.2\n'
+        ).encode('utf-8')
+
+        _, blanks, mss, samples, targets, _, _, _ = processor.read_raw(csv_bytes)
+
+        self.assertEqual([item[2] for item in blanks], ['Method Blank 1'])
+        self.assertEqual([item[2] for item in mss], ['MatrixSpike_1'])
+        self.assertEqual([item[2] for item in samples], ['Sample_01'])
+        self.assertEqual(targets, ['C8-PFAS'])
+
+    def test_converted_xlsx_underscored_headers_use_the_generic_reader(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Converted export'
+        ws.append(['Compound_Name', 'Ion Transition', 'Method Blank 1', 'MatrixSpike_1', 'Sample_01'])
+        ws.append(['C8-PFAS', '499>80', 0.01, 1.0, 0.2])
+        output = io.BytesIO()
+        wb.save(output)
+
+        raw, blanks, mss, samples, targets, _, _, _ = processor.read_raw(output.getvalue())
+
+        self.assertIn('C8-PFAS', raw)
+        self.assertEqual(len(blanks), 1)
+        self.assertEqual(len(mss), 1)
+        self.assertEqual([item[2] for item in samples], ['Sample_01'])
+        self.assertEqual(targets, ['C8-PFAS'])
+
 
 if __name__ == '__main__':
     unittest.main()

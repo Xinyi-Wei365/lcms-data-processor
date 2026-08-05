@@ -65,6 +65,19 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn('custom_ss_text = st.text_area(', sidebar_source)
         self.assertIn("key='custom_ss_text'", sidebar_source)
 
+    def test_ui_preview_accepts_legacy_xls_uploads(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("file_bytes.startswith(b'\\xd0\\xcf\\x11\\xe0')", source)
+        self.assertIn("pd.read_excel(io.BytesIO(file_bytes), header=None, engine='xlrd')", source)
+
+    def test_ui_shows_a_table_of_type_chain_and_role_for_detected_compounds(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn('compound_classification_rows', source)
+        self.assertIn('classification_rows', source)
+        self.assertIn('pd.DataFrame(classification_rows)', source)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -51,6 +51,11 @@ class SummarySheetTests(unittest.TestCase):
         ws = wb[next(s for s in wb.sheetnames if s.startswith('Final. conc'))]
         self.assertNotIn('>50%', str(ws['E4'].value))
 
+    def test_stats_source_sheet_does_not_claim_a_df_over_50_gate(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'process_lcms_data.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertNotIn('当DF>50%时ND替换', source)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -94,19 +94,47 @@ def extract_chain_length(name):
     return f'C{match.group(1)}' if match else None
 
 
+def infer_analyte_type(name):
+    """Infer a sortable chemical family from the imported analyte name.
+
+    QAC family names keep their established labels.  For other chemicals with
+    a chain-length prefix (for example ``C8-PFAS`` or ``C10-Phthalate``), the
+    text after the chain length becomes a family label.  Unknown free-text
+    names remain ``Other`` rather than being silently treated as QACs.
+    """
+    upper = normalize_analyte_name(name).upper()
+    if 'ATMAC' in upper:
+        return 'ATMAC'
+    if 'DADMAC' in upper:
+        return 'DADMAC'
+    if 'BAC' in upper:
+        return 'BAC'
+
+    # Prefer well-known multi-character families when present anywhere in a
+    # method name, including names without an explicit C-number prefix.
+    for family in ('PFOS', 'PFOA', 'PFHxS', 'PFNA', 'PFDA', 'PFAS', 'PAH', 'PCB'):
+        if family.upper() in upper:
+            return family.upper()
+
+    # Generic non-QAC family: capture the chemical-type part after C<number>.
+    # Remove isotope/oxidation decorations so related analytes stay together.
+    match = re.search(r'(?:^|[-_\s])C\d+(?:-\d+)?[-_\s]+([A-Za-z][A-Za-z0-9 ]*)', upper)
+    if match:
+        family = re.split(r'\s*(?:\+|-)(?:\d*O|\d*H|D\d+|\[.*)', match.group(1), maxsplit=1)[0]
+        family = re.sub(r'\s+', ' ', family).strip(' -_')
+        if family and family not in {'OTHER', 'UNKNOWN'}:
+            return family
+    return 'Other'
+
+
 def analyte_metadata(name):
     """Return display-safe metadata while preserving the original analyte name."""
     original = normalize_analyte_name(name)
-    upper = original.upper()
-    if 'ATMAC' in upper:
-        analyte_type = 'ATMAC'
-    elif 'DADMAC' in upper:
-        analyte_type = 'DADMAC'
-    elif 'BAC' in upper:
-        analyte_type = 'BAC'
-    else:
-        analyte_type = 'Other'
-    return {'name': original, 'type': analyte_type, 'chain_length': extract_chain_length(original)}
+    return {
+        'name': original,
+        'type': infer_analyte_type(original),
+        'chain_length': extract_chain_length(original),
+    }
 
 
 def resolve_roles(compounds, is_compounds=None, ss_compounds=None):
@@ -133,14 +161,48 @@ def configured_compound_lists(cfg, detected_compounds, detected_is=None, detecte
     return roles['target_compounds'], roles['is_compounds'], roles['ss_compounds'], list(detected_compounds)
 
 
+def compound_classification_rows(compounds, is_compounds=None, ss_compounds=None):
+    """Create an inspectable classification table for the Streamlit interface.
+
+    The imported names remain unchanged apart from the requested DDAC ->
+    DADMAC display normalization.  Roles always come from the user-confirmed
+    IS/SS selections, while targets are sorted by type and chain length.
+    """
+    roles = resolve_roles(compounds, is_compounds, ss_compounds)
+    rows = []
+    for role, items in (
+        ('目标物', sort_compounds(roles['target_compounds'])),
+        ('IS', sort_compounds(roles['is_compounds'])),
+        ('SS', sort_compounds(roles['ss_compounds'])),
+    ):
+        for compound in items:
+            metadata = analyte_metadata(compound)
+            rows.append({
+                '名称': metadata['name'],
+                '类型': metadata['type'],
+                '链长': metadata['chain_length'] or 'NA',
+                '角色': role,
+            })
+    return rows
+
+
 def sort_compounds(compounds):
     """Sort detected analytes by recognized family, chain length, then name."""
-    family_order = {'BAC': 0, 'DADMAC': 1, 'ATMAC': 2, 'Other': 3}
+    family_order = {'BAC': 0, 'DADMAC': 1, 'ATMAC': 2}
+    def family_sort_key(name):
+        analyte_type = analyte_metadata(name)['type']
+        if analyte_type in family_order:
+            return family_order[analyte_type], ''
+        # Non-QAC analytes are arranged by chain length first, then their
+        # inferred type.  This keeps e.g. C8-PFOS, C10-Other, C12-PFOS in a
+        # practical carbon-chain order while still exposing their types.
+        return 3, ''
     return sorted(
         list(dict.fromkeys(compounds)),
         key=lambda name: (
-            family_order.get(analyte_metadata(name)['type'], 3),
+            *family_sort_key(name),
             int(extract_chain_length(name)[1:]) if extract_chain_length(name) else 10**9,
+            analyte_metadata(name)['type'],
             str(name).upper(),
         ),
     )
@@ -150,22 +212,36 @@ def _cell_text(value):
     return str(value or '').strip()
 
 
+def _normalise_header_text(value):
+    """Normalize harmless header punctuation from CSV/XLSX conversion tools."""
+    return re.sub(r'[_\-]+', ' ', _cell_text(value).lower()).strip()
+
+
+def _is_compound_header(value):
+    return _normalise_header_text(value) in {
+        'name', 'analyte', 'analyte name', 'compound', 'compound name',
+        'compound id', '名称', '化合物', '化合物名称',
+    }
+
+
 def _looks_like_header_row(row):
-    texts = [_cell_text(value).lower() for value in row]
-    has_name = any(value in {'name', 'compound', 'compound name', '名称', '化合物'} for value in texts)
+    texts = [_normalise_header_text(value) for value in row]
+    has_name = any(_is_compound_header(value) for value in row)
     has_data_hint = any(('blank' in value or 'sample' in value or 'ms' in value or value.startswith('f')) for value in texts)
     return has_name and has_data_hint
 
 
 def _csv_rows(raw_bytes):
-    for encoding in ('utf-8-sig', 'utf-8', 'gb18030', 'big5'):
+    # UTF-16 is common when a CSV is opened and re-saved from Excel.  Prefer
+    # BOM-aware decoding before legacy East-Asian encodings.
+    for encoding in ('utf-8-sig', 'utf-16', 'utf-8', 'gb18030', 'big5'):
         try:
             text = raw_bytes.decode(encoding)
             break
         except UnicodeDecodeError:
             text = None
     if text is None:
-        raise ValueError('CSV encoding is not supported; please save as UTF-8 or GB18030.')
+        raise ValueError('CSV encoding is not supported; please save as UTF-8, UTF-16, or GB18030.')
     sample = text[:8192]
     try:
         dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
@@ -181,10 +257,10 @@ def _normalise_rows(rows):
         header_index = 0
     header = rows[header_index]
     body = rows[header_index + 1:]
-    name_col = next((i for i, value in enumerate(header)
-                     if _cell_text(value).lower() in {'name', 'compound', 'compound name', '名称', '化合物'}), 0)
+    name_col = next((i for i, value in enumerate(header) if _is_compound_header(value)), 0)
     data_start = name_col + 1
-    if data_start < len(header) and ('ion' in _cell_text(header[data_start]).lower() or '离子' in _cell_text(header[data_start])):
+    if data_start < len(header) and any(token in _cell_text(header[data_start]).lower()
+                                        for token in ('ion', 'transition', '离子', '母离子', '子离子')):
         data_start += 1
     return header, body, name_col, data_start
 
@@ -1126,7 +1202,7 @@ def build_sheet5(wb, sample_cols, S, cfg=None):
     fn = 'Final. conc 最终计算浓度'
     ss = 16  # sample start col P
 
-    ws.cell(row=1, column=1, value='统计数据源（供F:O统计，当DF>50%时ND替换为该化合物1/2 MDL）')
+    ws.cell(row=1, column=1, value='统计数据源（原始空单元格不参与统计；未检出有效样品按该化合物 1/2 MDL 替代）')
 
     ws.cell(row=2, column=1, value='样品名称'); sty(ws.cell(row=2,column=1), S['hdr'])
     for i in range(n_s):

@@ -12,7 +12,7 @@ import io
 from process_lcms_data import (
     process, read_raw, classify_compounds, resolve_roles,
     compute_preview_summary, compute_preview_final_table, detect_blank_zero_compounds,
-    parse_custom_ss_entries,
+    parse_custom_ss_entries, compound_classification_rows,
 )
 
 try:
@@ -46,15 +46,17 @@ except ImportError:
 
 
 def read_preview_table(file_bytes):
-    """Read either an XLSX or a delimited MassHunter export for display."""
+    """Read XLSX/XLS or a delimited MassHunter export for display."""
     if file_bytes.startswith(b'PK'):
         return pd.read_excel(io.BytesIO(file_bytes), sheet_name=0, header=None)
-    for encoding in ('utf-8-sig', 'utf-8', 'gb18030', 'big5'):
+    if file_bytes.startswith(b'\xd0\xcf\x11\xe0'):
+        return pd.read_excel(io.BytesIO(file_bytes), header=None, engine='xlrd')
+    for encoding in ('utf-8-sig', 'utf-16', 'utf-8', 'gb18030', 'big5'):
         try:
             return pd.read_csv(io.BytesIO(file_bytes), header=None, encoding=encoding, sep=None, engine='python')
         except (UnicodeDecodeError, pd.errors.ParserError):
             continue
-    raise ValueError('无法识别 CSV 编码或分隔符，请保存为 UTF-8、GB18030 或制表符分隔的 CSV。')
+    raise ValueError('无法识别 CSV 编码或分隔符，请保存为 UTF-8、UTF-16、GB18030 或制表符分隔的 CSV。')
 
 # ============================================================
 # 中英文对照字典
@@ -319,6 +321,8 @@ if file_bytes:
             st.write(f"**{t('target_label', L)}**:", ", ".join(target) if target else "-")
             st.write(f"**{t('is_label', L)}**:", ", ".join(is_c) if is_c else "-")
             st.write(f"**{t('ss_label', L)}**:", ", ".join(ss_c) if ss_c else "-")
+            classification_rows = compound_classification_rows(all_c, is_c, ss_c)
+            st.dataframe(pd.DataFrame(classification_rows), use_container_width=True, hide_index=True)
 
         col1, col2, col3 = st.columns(3)
         col1.metric(t('blank_cols', L), len(blanks))
