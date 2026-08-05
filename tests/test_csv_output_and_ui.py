@@ -86,11 +86,13 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn('classification_rows', source)
         self.assertIn('pd.DataFrame(classification_rows)', source)
 
-    def test_custom_ss_spike_value_is_shown_as_the_value_used_for_calculation(self):
+    def test_ui_uses_one_compound_by_ms_table_as_the_concentration_source_of_truth(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn('value=float(custom_ss.get(name, 4.0))', source)
-        self.assertNotIn('if name in custom_ss:\n                        ss_concentrations[name] = custom_ss[name]', source)
+        self.assertIn("key='compound_matrix_spike_concentration_table'", source)
+        self.assertIn('matrix_spike_concentrations = {', source)
+        self.assertNotIn("key=f'ss_conc_{name}'", source)
+        self.assertNotIn("key=f'is_conc_{name}'", source)
 
     def test_classification_table_updates_after_user_confirms_is_and_ss_roles(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:

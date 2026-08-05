@@ -301,8 +301,18 @@ def _parse_tabular_rows(header, body, compound_col, data_start_col):
     return data, blanks, mss, samps, target, is_c, ss_c, target + is_c + ss_c
 
 
-def resolve_ss_spike(name, cfg):
+def resolve_ss_spike(name, cfg, ms_column=None):
     """Resolve a surrogate's own spike concentration by exact analyte name."""
+    # The compound-by-MS table is the most specific source when supplied.
+    if ms_column is not None:
+        configured_matrix = cfg.get('matrix_spike_concentrations') or {}
+        _, letter, header = ms_column
+        per_ms = configured_matrix.get(name)
+        if isinstance(per_ms, dict):
+            for key in (header, letter):
+                value = safe_float(per_ms.get(key))
+                if value is not None and value > 0:
+                    return value
     configured = cfg.get('ss_spike_concentrations') or {}
     if name in configured:
         value = safe_float(configured[name])
@@ -316,16 +326,20 @@ def resolve_ss_spike(name, cfg):
     return safe_float(cfg.get('ss_spike_conc_ppb'))
 
 
-def resolve_matrix_spike_concentration(ms_column, cfg):
-    """Return the spike concentration assigned to one matrix-spike column.
+def resolve_matrix_spike_concentration(compound, ms_column, cfg):
+    """Return one compound's concentration in one matrix-spike column.
 
-    A map keyed by the imported MS header (for example ``MS1`` or
-    ``MatrixSpike_2``) takes precedence.  The legacy single concentration is
-    retained only as a default for callers that have not supplied per-column
-    values.
+    The preferred configuration is ``{compound: {MS1: value, MS2: value}}``.
+    A flat header map remains supported for old saved configurations.
     """
     _, letter, header = ms_column
     configured = cfg.get('matrix_spike_concentrations') or {}
+    per_ms = configured.get(compound)
+    if isinstance(per_ms, dict):
+        for key in (header, letter):
+            value = safe_float(per_ms.get(key))
+            if value is not None and value > 0:
+                return value
     for key in (header, letter):
         value = safe_float(configured.get(key))
         if value is not None and value > 0:
@@ -808,7 +822,7 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
             v = safe_float(raw_data.get(comp, {}).get(cl))
             c = ws.cell(row=row, column=rec_start+i)
             if v is not None:
-                c.value = round_int((v / resolve_matrix_spike_concentration(ms_col, cfg)) * 100)
+                c.value = round_int((v / resolve_matrix_spike_concentration(comp, ms_col, cfg)) * 100)
                 c.number_format = '0'
             sty(c, S['rec'])
 
@@ -841,9 +855,6 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
     selected_ss = cfg.get('ss_compounds', SS_COMPS)
     for ss in selected_ss:
         ws.cell(row=row, column=1, value=ss); sty(ws.cell(row=row,column=1), S['cmpd'])
-        this_ss_spike = resolve_ss_spike(ss, cfg)
-        if this_ss_spike is None or this_ss_spike <= 0:
-            raise ValueError(f'{ss}: missing positive SS spike concentration.')
         # MS数据列：照抄原始浓度（不除以任何值）
         for i, (_, cl, _) in enumerate(ms_cols):
             v = safe_float(raw_data.get(ss, {}).get(cl))
@@ -854,10 +865,14 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
         ws.cell(row=row, column=mid1, value=None)
         ws.cell(row=row, column=rec_lbl, value=None)
         # 回收率列：SS实测浓度 ÷ SS理论加标浓度 × 100%
-        for i, (_, cl, _) in enumerate(ms_cols):
+        for i, ms_col in enumerate(ms_cols):
+            _, cl, _ = ms_col
             v = safe_float(raw_data.get(ss, {}).get(cl))
             c = ws.cell(row=row, column=rec_start+i)
             if v is not None:
+                this_ss_spike = resolve_ss_spike(ss, cfg, ms_col)
+                if this_ss_spike is None or this_ss_spike <= 0:
+                    raise ValueError(f'{ss}: missing positive SS spike concentration for {ms_col[2]}.')
                 c.value = round_int((v / this_ss_spike) * 100)
                 c.number_format = '0'
             sty(c, S['rec'])
@@ -1339,21 +1354,42 @@ def build_info_sheet(wb, S, cfg):
         ['本次参数',f'样本:{cfg["sample_type"]} 取样:{cfg["sample_volume_ml"]}mL 定容:{cfg["final_volume_ml"]}mL 换算因子:{cfg["conversion_factor"]}','',''],
     ]
     is_corrected = bool(cfg.get('is_corrected', False))
+    ms_headers = cfg.get('matrix_spike_headers') or []
+    matrix_cfg = cfg.get('matrix_spike_concentrations') or {}
     configured_is = cfg.get('is_spike_concentrations') or {}
     for name in cfg.get('is_compounds', []):
-        value = safe_float(configured_is.get(name))
-        if value is not None and value > 0:
-            rows.append([
-                'IS addition record', name, f'{value:g} ppb',
-                'Recorded only; IS correction applied: ' + ('yes' if is_corrected else 'no') + '. Does not change concentration formulas.',
-            ])
-    for header, value in (cfg.get('matrix_spike_concentrations') or {}).items():
-        value = safe_float(value)
-        if value is not None and value > 0:
-            rows.append([
-                'Matrix spike concentration', header, f'{value:g} ppb',
-                'Used only for this matrix-spike recovery column.',
-            ])
+        per_ms = matrix_cfg.get(name)
+        if isinstance(per_ms, dict) and ms_headers:
+            values = '; '.join(
+                f'{header}: {safe_float(per_ms.get(header)):g} ppb'
+                for header in ms_headers
+                if safe_float(per_ms.get(header)) is not None and safe_float(per_ms.get(header)) > 0
+            )
+            if values:
+                rows.append([
+                    'IS addition record', name, values,
+                    'Recorded only; IS correction applied: ' + ('yes' if is_corrected else 'no') + '. Does not change concentration formulas.',
+                ])
+        else:
+            value = safe_float(configured_is.get(name))
+            if value is not None and value > 0:
+                rows.append([
+                    'IS addition record', name, f'{value:g} ppb',
+                    'Recorded only; IS correction applied: ' + ('yes' if is_corrected else 'no') + '. Does not change concentration formulas.',
+                ])
+    for name, configured in matrix_cfg.items():
+        if isinstance(configured, dict):
+            values = '; '.join(
+                f'{header}: {safe_float(configured.get(header)):g} ppb'
+                for header in ms_headers
+                if safe_float(configured.get(header)) is not None and safe_float(configured.get(header)) > 0
+            )
+            if values:
+                rows.append(['Matrix spike concentration', name, values, 'Used for this compound in the corresponding MS columns; IS values are record-only.'])
+        else:
+            value = safe_float(configured)
+            if value is not None and value > 0:
+                rows.append(['Matrix spike concentration', name, f'{value:g} ppb', 'Used only for this matrix-spike recovery column.'])
     for r, rd in enumerate(rows, 1):
         for c, val in enumerate(rd, 1):
             cell = ws.cell(row=r, column=c, value=val)
@@ -1410,10 +1446,7 @@ def process(config=None, return_bytes=False):
     if not src:
         raise ValueError('No input file or data provided')
     raw_data, blanks, mss, samps, detected_target, detected_is, detected_ss, detected_all = read_raw(src)
-    configured_ms = dict(cfg.get('matrix_spike_concentrations') or {})
-    for _, _, header in mss:
-        configured_ms.setdefault(header, cfg.get('spike_conc_ppb', 10))
-    cfg['matrix_spike_concentrations'] = configured_ms
+    cfg['matrix_spike_headers'] = [header for _, _, header in mss]
     target, is_c, ss_c, all_c = configured_compound_lists(cfg, detected_all, detected_is, detected_ss)
     cfg['target_compounds'] = target
     cfg['is_compounds'] = is_c

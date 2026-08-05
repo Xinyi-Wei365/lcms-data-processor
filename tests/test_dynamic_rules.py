@@ -168,6 +168,37 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertIn(['Matrix spike concentration', 'MS1', '10 ppb', 'Used only for this matrix-spike recovery column.'], rows)
         self.assertIn(['Matrix spike concentration', 'MS2', '20 ppb', 'Used only for this matrix-spike recovery column.'], rows)
 
+    def test_compound_by_ms_concentrations_apply_to_target_ss_and_is_records(self):
+        raw = (
+            'Name,Ion,BLANK1,BLANK2,MS1,MS2,MS3,F1\n'
+            'C8-BAC,248>91,0.1,0.2,10,20,5,0.5\n'
+            'My Surrogate,300>100,0.1,0.2,4,2,1,2\n'
+            'My Internal Standard,301>101,0.1,0.2,4,8,2,4\n'
+        ).encode('utf-8')
+        concentrations = {
+            'C8-BAC': {'MS1': 10, 'MS2': 20, 'MS3': 5},
+            'My Surrogate': {'MS1': 4, 'MS2': 2, 'MS3': 1},
+            'My Internal Standard': {'MS1': 4, 'MS2': 8, 'MS3': 2},
+        }
+        output, _ = processor.process({
+            'input_bytes': raw, 'input_file': '', 'output_file': 'compound_ms.xlsx',
+            'is_compounds': ['My Internal Standard'],
+            'ss_compounds': ['My Surrogate'],
+            'matrix_spike_concentrations': concentrations,
+        }, return_bytes=True)
+        workbook = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        matrix_sheet = workbook[next(name for name in workbook.sheetnames if name.startswith('Matrix spike'))]
+        target_row = next(row for row in range(1, matrix_sheet.max_row + 1)
+                          if matrix_sheet.cell(row, 1).value == 'C8-BAC')
+        ss_row = next(row for row in range(1, matrix_sheet.max_row + 1)
+                      if matrix_sheet.cell(row, 1).value == 'My Surrogate')
+        # Target and SS each use their own row-by-MS values: all three are 100%.
+        self.assertEqual([matrix_sheet.cell(target_row, c).value for c in (7, 8, 9)], [100, 100, 100])
+        self.assertEqual([matrix_sheet.cell(ss_row, c).value for c in (7, 8, 9)], [100, 100, 100])
+        info = workbook['计算说明']
+        rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
+        self.assertIn(['IS addition record', 'My Internal Standard', 'MS1: 4 ppb; MS2: 8 ppb; MS3: 2 ppb', 'Recorded only; IS correction applied: no. Does not change concentration formulas.'], rows)
+
     def test_non_qac_csv_end_to_end_keeps_type_order_and_blank_zero_snr_mdl(self):
         raw = (
             'Compound_Name,Ion Transition,BLANK1,BLANK2,MatrixSpike_1,Sample_01,Sample_02\n'

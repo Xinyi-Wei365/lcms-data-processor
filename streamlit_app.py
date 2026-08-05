@@ -83,9 +83,11 @@ T = {
     'cf_locked':            {'zh': '（已锁定）',                                  'en': ' (Locked)'},
     'cf_editable':          {'zh': '（可手动覆盖）',                              'en': ' (Editable)'},
     'spike_conc':           {'zh': '基质加标浓度 (ppb)',                          'en': 'Matrix Spike Conc (ppb)'},
-    'ms_spike_header':      {'zh': '基质加标浓度（按 MS 列分别设置）',               'en': 'Matrix-spike concentrations (set per MS column)'},
-    'ms_spike_help':        {'zh': '每一个 MS 列使用自己的加标浓度计算回收率。示例：MS1 加 10 ppb、MS2 加 20 ppb，则分别输入 10 和 20；SS 仍只按 SS 自身浓度计算，IS 浓度仅记录。',
-                             'en': 'Each MS column uses its own spike concentration. Example: enter 10 for MS1 and 20 for MS2 when they were spiked at 10 and 20 ppb. SS still uses only its own concentration; IS values are record-only.'},
+    'ms_spike_header':      {'zh': '基质加标浓度设置（化合物 × MS列）',               'en': 'Matrix-spike concentrations (compound × MS column)'},
+    'ms_spike_help':        {'zh': '逐格填写每种化合物在每个 MS 样品中的实际加标浓度。示例：C8-BAC 的 MS1/MS2/MS3 为 10/20/10 ppb；SS 也逐格填其自身浓度并据此计算回收率；IS 逐格记录但不参与回收率或浓度换算。',
+                             'en': 'Enter the actual spike amount for every compound in every MS sample. Example: C8-BAC MS1/MS2/MS3 = 10/20/10 ppb. SS uses its own per-cell amount for recovery; IS values are recorded only.'},
+    'ms_spike_example':     {'zh': '示例：目标物 C8-BAC 可填 MS1=10、MS2=20、MS3=10；SS d7-C12-BAC 可填 4、4、2；IS C13-C12-BAC 可填 4、4、4（仅记录）。',
+                             'en': 'Example: target C8-BAC = 10, 20, 10; SS d7-C12-BAC = 4, 4, 2; IS C13-C12-BAC = 4, 4, 4 (record only).'},
     'file_header':          {'zh': '📁 文件',                                    'en': '📁 File'},
     'upload_label':         {'zh': '上传原始数据（XLSX 或 CSV）',                  'en': 'Upload Raw Data (XLSX or CSV)'},
     'output_name':          {'zh': '输出文件名',                                  'en': 'Output Filename'},
@@ -345,17 +347,6 @@ if file_bytes:
         col2.metric(t('ms_cols', L), len(mss))
         col3.metric(t('sample_cols', L), len(samps))
 
-        if mss:
-            st.subheader(t('ms_spike_header', L))
-            st.caption(t('ms_spike_help', L))
-            ms_grid = st.columns(min(3, len(mss)))
-            for i, (_, _, header) in enumerate(mss):
-                with ms_grid[i % len(ms_grid)]:
-                    matrix_spike_concentrations[header] = st.number_input(
-                        f'{header} (ppb)', min_value=0.000001, value=float(spike_conc),
-                        step=1.0, key=f'ms_spike_conc_{header}',
-                    )
-
         st.subheader(t('roles_header', L))
         st.caption(t('roles_caption', L))
         selected_is = st.multiselect(t('is_select', L), all_c, default=is_c)
@@ -379,36 +370,34 @@ if file_bytes:
         overlap = set(selected_is) & set(selected_ss)
         if overlap:
             st.error(f'同一化合物不能同时作为 IS 与 SS：{sorted(overlap)}')
-        if selected_ss:
-            st.write(t('ss_spike_grid', L))
-            ss_grid = st.columns(min(3, len(selected_ss)))
-            for i, name in enumerate(selected_ss):
-                with ss_grid[i % len(ss_grid)]:
-                    if name in custom_ss:
-                        # A custom SS line is the source of truth for its own
-                        # spike concentration.  Show the exact calculation
-                        # value read-only so displayed and used values match.
-                        ss_concentrations[name] = st.number_input(
-                            name, min_value=0.000001, value=float(custom_ss.get(name, 4.0)),
-                            step=1.0, key=f'custom_ss_conc_{name}', disabled=True,
-                        )
-                    else:
-                        ss_concentrations[name] = st.number_input(
-                            name, min_value=0.000001, value=4.0, step=1.0, key=f'ss_conc_{name}'
-                        )
-        if selected_is:
-            st.write(t('is_spike_grid', L))
-            is_grid = st.columns(min(3, len(selected_is)))
-            for i, name in enumerate(selected_is):
-                with is_grid[i % len(is_grid)]:
-                    is_spike_concentrations[name] = st.number_input(
-                        name,
-                        min_value=0.000001,
-                        value=float(custom_is.get(name, 4.0)),
-                        step=1.0,
-                        key=f'is_conc_{name}',
-                        disabled=name in custom_is,
+        if mss:
+            st.subheader(t('ms_spike_header', L))
+            st.caption(t('ms_spike_help', L))
+            st.info(t('ms_spike_example', L))
+            roles_for_ms = resolve_roles(all_c, selected_is, selected_ss)
+            ms_rows = []
+            for role, names in (('目标物', roles_for_ms['target_compounds']), ('SS', roles_for_ms['ss_compounds']), ('IS', roles_for_ms['is_compounds'])):
+                for name in names:
+                    default_concentration = (
+                        float(custom_ss.get(name, 4.0)) if role == 'SS'
+                        else float(custom_is.get(name, 4.0)) if role == 'IS'
+                        else float(spike_conc)
                     )
+                    ms_rows.append({'化合物名称': name, '类型/角色': role, **{header: default_concentration for _, _, header in mss}})
+            ms_table = st.data_editor(
+                pd.DataFrame(ms_rows),
+                column_config={header: st.column_config.NumberColumn(header, min_value=0.000001, step=0.1, format='%.6f') for _, _, header in mss},
+                disabled=['化合物名称', '类型/角色'], hide_index=True, use_container_width=True,
+                key='compound_matrix_spike_concentration_table',
+            )
+            matrix_spike_concentrations = {
+                row['化合物名称']: {header: float(row[header]) for _, _, header in mss}
+                for _, row in ms_table.iterrows()
+            }
+        # The two-dimensional MS table is the source of truth.  Keep these
+        # one-value maps only as backward-compatible fallbacks for old files.
+        ss_concentrations = {name: float(custom_ss.get(name, 4.0)) for name in selected_ss}
+        is_spike_concentrations = {name: float(custom_is.get(name, 4.0)) for name in selected_is}
 
         # This table reflects the final user-confirmed IS/SS selection, not
         # merely the name-pattern auto-detection shown immediately on import.
