@@ -23,7 +23,6 @@ class SummarySheetTests(unittest.TestCase):
             'spike_conc_ppb': 10,
             'ss_compounds': ['d7-C12-BAC', 'd9-C10-ATMAC'],
             'ss_spike_concentrations': {'d7-C12-BAC': 4, 'd9-C10-ATMAC': 4},
-            'mql_factor': 3.333333333,
             'output_file': 'summary.xlsx',
         }, return_bytes=True)
         wb = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
@@ -40,14 +39,14 @@ class SummarySheetTests(unittest.TestCase):
         self.assertIn('ROUND', str(ws['C4'].value))
         self.assertIn('Blanks_MDL', str(ws['F4'].value))
         self.assertNotIn('>50%', str(ws['D4'].value))
-        self.assertIn('不受 DF', str(ws['A2'].value))
+        self.assertIn('真实检出率', str(ws['A2'].value))
         self.assertEqual(ws['B4'].value, 'C8')
         self.assertIn('*100', str(ws['C4'].value))
         self.assertEqual(ws['C4'].number_format, 'General')
         self.assertEqual(ws['E4'].number_format, 'General')
         self.assertEqual(ws['F4'].number_format, 'General')
         blanks = wb['Blanks_MDL 空白基质检出限']
-        self.assertIn('>50%', str(blanks['I1'].value))
+        self.assertNotIn('>50%', str(blanks['I1'].value))
 
     def test_legacy_final_statistics_are_not_gated_by_df(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'demo_urine_qac_masshunter.xlsx'), 'rb') as source:

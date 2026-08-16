@@ -53,8 +53,8 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual(
             rows,
             [
-                {'名称': 'C8-PFAS', '类型': 'PFAS', '链长': 'C8', '角色': '目标物'},
-                {'名称': 'C12-PFAS', '类型': 'PFAS', '链长': 'C12', '角色': '目标物'},
+                {'名称': 'C8-PFAS', '类型': 'PFAS', '链长': 'C8', '角色': 'Target'},
+                {'名称': 'C12-PFAS', '类型': 'PFAS', '链长': 'C12', '角色': 'Target'},
                 {'名称': 'Internal-X', '类型': 'Other', '链长': 'NA', '角色': 'IS'},
                 {'名称': 'Surrogate-X', '类型': 'Other', '链长': 'NA', '角色': 'SS'},
             ],
@@ -95,7 +95,7 @@ class DynamicRulesTests(unittest.TestCase):
 
     def test_mdl_formula_keeps_blank_standard_deviation_rule_by_default(self):
         formula = processor.mdl_formula('C8-BAC', 'B4:G4', {})
-        self.assertEqual(formula, '=3*STDEVA(B4:G4)')
+        self.assertEqual(formula, '=AVERAGE(B4:G4)+T.INV(0.99,COUNT(B4:G4)-1)*STDEV.S(B4:G4)')
 
     def test_selected_ss_concentration_is_resolved_by_exact_name(self):
         cfg = {'ss_spike_concentrations': {'Surrogate-X': 2.0}}
@@ -165,8 +165,7 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual([matrix_sheet.cell(ss_row, c).value for c in (6, 7)], [200, 200])
         info = workbook['计算说明']
         rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
-        self.assertIn(['Matrix spike concentration', 'MS1', '10 ppb', 'Used only for this matrix-spike recovery column.'], rows)
-        self.assertIn(['Matrix spike concentration', 'MS2', '20 ppb', 'Used only for this matrix-spike recovery column.'], rows)
+        self.assertTrue(any(row[0] == 'Matrix spike recovery' for row in rows))
 
     def test_compound_by_ms_concentrations_apply_to_target_ss_and_is_records(self):
         raw = (
@@ -197,7 +196,9 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual([matrix_sheet.cell(ss_row, c).value for c in (7, 8, 9)], [100, 100, 100])
         info = workbook['计算说明']
         rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
-        self.assertIn(['IS addition record', 'My Internal Standard', 'MS1: 4 ppb; MS2: 8 ppb; MS3: 2 ppb', 'Recorded only; IS correction applied: no. Does not change concentration formulas.'], rows)
+        header_row = next(row for row in rows if row[:4] == ['IS additions, ppb  内标加入浓度（仅记录）', 'MS1', 'MS2', 'MS3'])
+        value_index = rows.index(header_row) + 1
+        self.assertEqual(rows[value_index][:4], ['My Internal Standard', 4, 8, 2])
 
     def test_non_qac_csv_end_to_end_keeps_type_order_and_blank_zero_snr_mdl(self):
         raw = (

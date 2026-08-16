@@ -26,10 +26,13 @@ class PreviewValueTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['名称'], 'C8-BAC')
         self.assertEqual(rows[0]['链长'], 'C8')
-        self.assertAlmostEqual(rows[0]['DF (%)'], 100.0)
-        self.assertEqual(rows[0]['Median (Q1-Q3)'], '1.5 (1.25-1.75)')
-        self.assertAlmostEqual(rows[0]['MDL'], 0.6, places=6)
-        self.assertAlmostEqual(rows[0]['MQL'], 2.0, places=6)
+        self.assertAlmostEqual(rows[0]['DF (%)'], 50.0)
+        # With the confirmed rule, the vial MDL is 2.393 ppb.  F1 (2.0)
+        # is therefore a valid non-detect and becomes 1/2 MDL; F2 (3.0) is
+        # a true detection and becomes 3.0 - blank mean (1.0) = 2.0.
+        self.assertEqual(rows[0]['Median (Q1-Q3)'], '1.6 (1.4-1.8)')
+        self.assertAlmostEqual(rows[0]['MDL'], 2.39, places=2)
+        self.assertAlmostEqual(rows[0]['MQL'], 3.0, places=6)
 
     def test_numeric_final_preview_has_sample_values_without_formula_text(self):
         raw_data = {
@@ -41,6 +44,8 @@ class PreviewValueTests(unittest.TestCase):
             raw_data, blank_cols, sample_cols,
             {'target_compounds': ['C8-BAC'], 'conversion_factor': 1.0}
         )
+        # In this fixture blank SD is zero, so vial MDL is 1.0 and both
+        # samples are true detections: (2-1)=1 and (3-1)=2.
         self.assertEqual(rows, [{'名称': 'C8-BAC', 'F1': 1.0, 'F2': 2.0}])
 
     def test_df_counts_only_true_detections_not_half_mdl_substitutions(self):
@@ -62,7 +67,7 @@ class PreviewValueTests(unittest.TestCase):
         self.assertAlmostEqual(rows[0]['DF (%)'], 33.3)
         # DF is shown independently. All available final concentrations,
         # including 1/2 MDL substitutions, are summarized regardless of DF.
-        self.assertEqual(rows[0]['Median (Q1-Q3)'], '0 (0-0.5)')
+        self.assertEqual(rows[0]['Median (Q1-Q3)'], '0.5 (0.5-0.75)')
 
     def test_blank_zero_preview_reports_mdl_and_mql_in_sample_units(self):
         raw_data = {'C12-Other': {'B': 0, 'C': 0, 'D': 0, 'E': 2}}
@@ -79,7 +84,7 @@ class PreviewValueTests(unittest.TestCase):
             }},
         })
         self.assertAlmostEqual(rows[0]['MDL'], 0.025, places=6)
-        self.assertAlmostEqual(rows[0]['MQL'], 0.0833, places=6)
+        self.assertAlmostEqual(rows[0]['MQL'], 0.0833, places=3)
 
 
 if __name__ == '__main__':

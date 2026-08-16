@@ -52,7 +52,8 @@ class ConversionFactorTests(unittest.TestCase):
         self.assertIn('>0', final_ws['D4'].value)
         self.assertNotIn('COUNT(P4:R4)', final_ws['D4'].value)
         info_ws = wb['计算说明']
-        self.assertIn('真实检出', str(info_ws['D12'].value))
+        self.assertTrue(any('原始瓶内浓度≥瓶内MDL' in str(info_ws.cell(row, 4).value)
+                            for row in range(1, info_ws.max_row + 1)))
 
 
 if __name__ == '__main__':

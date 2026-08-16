@@ -12,7 +12,7 @@ import io
 from process_lcms_data import (
     process, read_raw, classify_compounds, resolve_roles,
     compute_preview_summary, compute_preview_final_table, detect_blank_zero_compounds,
-    parse_custom_ss_entries, compound_classification_rows,
+    parse_custom_ss_entries, compound_classification_rows, compound_metadata_for,
 )
 
 try:
@@ -88,6 +88,8 @@ T = {
                              'en': 'Enter the actual spike amount for every compound in every MS sample. Example: C8-BAC MS1/MS2/MS3 = 10/20/10 ppb. SS uses its own per-cell amount for recovery; IS values are recorded only.'},
     'ms_spike_example':     {'zh': '示例：目标物 C8-BAC 可填 MS1=10、MS2=20、MS3=10；SS d7-C12-BAC 可填 4、4、2；IS C13-C12-BAC 可填 4、4、4（仅记录）。',
                              'en': 'Example: target C8-BAC = 10, 20, 10; SS d7-C12-BAC = 4, 4, 2; IS C13-C12-BAC = 4, 4, 4 (record only).'},
+    'ms_table_compound': {'zh': '化合物名称', 'en': 'Compound name'},
+    'ms_table_role': {'zh': '类型/角色', 'en': 'Type / role'},
     'file_header':          {'zh': '📁 文件',                                    'en': '📁 File'},
     'upload_label':         {'zh': '上传原始数据（XLSX 或 CSV）',                  'en': 'Upload Raw Data (XLSX or CSV)'},
     'output_name':          {'zh': '输出文件名',                                  'en': 'Output Filename'},
@@ -97,6 +99,13 @@ T = {
     'roles_caption':        {'zh': '系统按名称预识别；请确认哪些为 IS、SS。未选为 IS/SS 的化合物将作为目标物。', 'en': 'Roles are auto-detected by name; confirm IS and SS. Unselected compounds remain targets.'},
     'is_select':            {'zh': 'IS 内标（可多选）',                            'en': 'IS internal standards'},
     'ss_select':            {'zh': 'SS 替代物（可多选）',                          'en': 'SS surrogates'},
+    'classification_header': {'zh': '化合物智能分类（请核对并可直接修改）',           'en': 'Smart compound classification (review and edit)'},
+    'classification_help': {'zh': '系统从名称自动建议类型、链长和角色；未知结构不猜测。请直接修改类别、链长和角色，所有输出表会使用此设置排序。', 'en': 'The system suggests type, chain length and role from names without guessing unknown structures. Edit these fields directly; all output sheets use this order.'},
+    'classification_name': {'zh': '名称', 'en': 'Name'},
+    'classification_type': {'zh': '类型', 'en': 'Type'},
+    'classification_chain': {'zh': '链长', 'en': 'Chain length'},
+    'classification_role': {'zh': '角色', 'en': 'Role'},
+    'role_options': {'zh': ['目标物', '替代物 (SS)', '内标 (IS)'], 'en': ['Target', 'Surrogate (SS)', 'Internal standard (IS)']},
     'blank_zero_header':    {'zh': 'blank=0 的 MDL 设置',                        'en': 'Blank-zero MDL settings'},
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
@@ -113,6 +122,10 @@ T = {
     'calibration':          {'zh': '标曲浓度 (ppb)',                              'en': 'Calibration concentration (ppb)'},
     'sn':                   {'zh': 'S/N',                                         'en': 'S/N'},
     'mql_help':             {'zh': '默认 3.333333；请按实验室方法确认。',              'en': 'Default 3.333333; confirm with your laboratory method.'},
+    'low_spike_header': {'zh': '低浓度加标重复值（用于 blank≠0 的动态 t 值 MDL）', 'en': 'Low-level spike replicates (dynamic-t MDL when blank is not zero)'},
+    'low_spike_help': {'zh': '每行填写“化合物名称, 值1, 值2, …”。这些必须是同一低浓度、完整前处理的平行加标结果；不同浓度的 MS1/MS2/MS3 不能混填。未填写时仅使用空白分支计算 MDL。', 'en': 'One line per compound: “name, value1, value2, …”. Values must be same-level, full-method low-spike replicates; do not mix MS1/MS2/MS3 at different concentrations. Without them, only the blank branch is used.'},
+    'low_spike_placeholder': {'zh': 'C8-BAC, 0.90, 1.00, 1.10, 1.00, 1.00, 0.90, 1.10', 'en': 'C8-BAC, 0.90, 1.00, 1.10, 1.00, 1.00, 0.90, 1.10'},
+    'low_spike_incomplete': {'zh': '以下目标物未填写至少 2 个同浓度低浓度加标重复值；MDL/MQL 将只使用空白分支，不能代表完整的双分支方法：', 'en': 'The following targets have fewer than two same-level low-spike replicates; MDL/MQL will use only the blank branch and will not represent the full two-branch method: '},
     'preview_stats':        {'zh': '描述性统计（在线数值预览）',                     'en': 'Descriptive statistics (numeric preview)'},
     'preview_stats_help':   {'zh': '这里显示已计算的数值；下载的 Excel 同时保留可审计公式。', 'en': 'Calculated values are shown here; downloaded Excel retains auditable formulas.'},
     'preview_final':        {'zh': '最终浓度（在线数值预览）',                       'en': 'Final concentrations (numeric preview)'},
@@ -140,6 +153,14 @@ T = {
     'rows_cols_suffix':     {'zh': '列',                                         'en': ' columns'},
     'download_btn':         {'zh': '⬇️ 下载处理结果',                             'en': '⬇️ Download Result'},
     'error':                {'zh': '处理失败',                                    'en': 'Processing Failed'},
+    'demo_loaded': {'zh': 'Demo 数据已加载：这是可直接处理的尿液 MassHunter 示例；请核对参数后点击“开始处理”。', 'en': 'Demo data loaded: this is a directly processable urine MassHunter example. Review settings, then click Start Processing.'},
+    'format_ok': {'zh': '文件格式检查通过', 'en': 'Input format check passed'},
+    'format_bad': {'zh': '文件格式检查未通过', 'en': 'Input format check failed'},
+    'result_formula_note': {'zh': '下载的 Excel 保留可审计公式；在线预览显示按同一规则计算的数值。', 'en': 'The downloaded Excel keeps auditable formulas; the online preview shows numeric values calculated with the same rules.'},
+    'custom_is_missing': {'zh': '未在上传文件中找到自定义 IS：', 'en': 'Custom IS was not found in the uploaded file: '},
+    'custom_ss_missing': {'zh': '未在上传文件中找到自定义 SS：', 'en': 'Custom SS was not found in the uploaded file: '},
+    'role_overlap': {'zh': '同一化合物不能同时作为 IS 与 SS：', 'en': 'An analyte cannot be both IS and SS: '},
+    'low_spike_missing': {'zh': '未在上传文件中找到低浓度加标化合物：', 'en': 'Low-spike compound was not found in the uploaded file: '},
 }
 
 def t(key, lang='zh'):
@@ -147,6 +168,47 @@ def t(key, lang='zh'):
     if key in T:
         return T[key].get(lang, T[key].get('zh', key))
     return key
+
+
+def parse_low_spike_entries(text):
+    """Parse same-level low-spike replicates: name, value1, value2, ..."""
+    entries, errors = {}, []
+    for line_number, raw_line in enumerate(str(text or '').splitlines(), 1):
+        parts = [part.strip() for part in raw_line.split(',') if part.strip()]
+        if not parts:
+            continue
+        if len(parts) < 3:
+            errors.append(f'Line {line_number}: enter name plus at least two replicate values.')
+            continue
+        try:
+            values = [float(value) for value in parts[1:]]
+        except ValueError:
+            errors.append(f'Line {line_number}: replicate values must be numeric.')
+            continue
+        if any(value < 0 for value in values):
+            errors.append(f'Line {line_number}: replicate values cannot be negative.')
+            continue
+        entries[parts[0]] = values
+    return entries, errors
+
+
+def role_label(role, language):
+    """Present internal roles in the language selected by the user."""
+    labels = {
+        'zh': {'Target': '目标物', 'SS': '替代物 (SS)', 'IS': '内标 (IS)'},
+        'en': {'Target': 'Target', 'SS': 'Surrogate (SS)', 'IS': 'Internal standard (IS)'},
+    }
+    return labels[language].get(role, role)
+
+
+def role_from_label(label):
+    """Map an editable bilingual role label back to the processor role."""
+    value = str(label or '').strip()
+    if value in {'IS', 'Internal standard (IS)', '内标 (IS)', '内标'}:
+        return 'IS'
+    if value in {'SS', 'Surrogate (SS)', '替代物 (SS)', '替代物'}:
+        return 'SS'
+    return 'Target'
 
 # ============================================================
 # 页面设置
@@ -236,6 +298,13 @@ with st.sidebar:
         label_visibility='collapsed',
     )
 
+    st.subheader(t('low_spike_header', L))
+    st.caption(t('low_spike_help', L))
+    low_spike_text = st.text_area(
+        t('low_spike_header', L), value='', placeholder=t('low_spike_placeholder', L),
+        key='low_spike_text', label_visibility='collapsed',
+    )
+
     st.divider()
     st.header(t('file_header', L))
     uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx", "xls", "csv", "tsv"])
@@ -251,47 +320,9 @@ with st.sidebar:
 # 主区域
 # ============================================================
 
-def get_demo_bytes():
-    """生成 Demo 示例数据（内置，无需外部文件）"""
-    import openpyxl as _xl
-    wb = _xl.Workbook()
-    ws = wb.active; ws.title = 'Sheet1'
-    ws.cell(row=1, column=1, value='化合物方法')
-    ws.cell(row=2, column=1, value='名称'); ws.cell(row=2, column=2, value='离子对')
-    hdrs = ['F91-BLANK1','F92-BLANK2','F93-BLANK3','F94-BLANK4','F95-BLANK5','F96-BLANK6',
-            '10PPB','F89-MS1','F90-MS2','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10']
-    for i,h in enumerate(hdrs):
-        ws.cell(row=1, column=3+i, value=h); ws.cell(row=2, column=3+i, value='最终浓度')
-    demo_data = [
-        ('C8-BAC','248.2->91.0', [0.000498,0.019774,0.000505,0.000671,0.000549,0.001351], [0.1741,9.9987], [0.2617,0.2135], [0.000919,0.000893,0.002015,None,0.000692,0.001064,0.000784,0.001488,0.000453,None]),
-        ('C10-BAC','276.3->91.1', [0.001464,0.023144,0.001582,0.003866,0.001540,0.010050], [0.1505,10.0234], [1.3550,0.9567], [0.0257,0.0261,0.0247,None,0.0243,0.0109,0.0200,0.0184,0.0179,0.0057]),
-        ('C12-BAC','304.3->91.0', [0.062243,0.068513,0.053031,0.059037,0.057253,0.152859], [0.4065,10.1234], [1.2908,0.9064], [0.0875,0.0823,0.0912,None,0.0789,0.0680,0.0734,0.0710,0.0663,0.0758]),
-        ('C14-BAC','332.3->91.1', [0.012054,0.020653,0.010276,0.011484,0.010341,0.032861], [0.1965,10.0345], [0.4191,0.3179], [0.0268,0.0241,0.0289,None,0.0217,0.0193,0.0224,0.0208,0.0185,0.0246]),
-        ('C16-BAC','360.4->91.1', [0.009222,0.019469,0.009451,0.007037,0.009124,0.012168], [0.1643,10.0456], [0.1224,0.1248], [0.0156,0.0139,0.0168,None,0.0121,0.0105,0.0118,0.0112,0.0098,0.0134]),
-        ('C18-BAC','388.4->91.0', [0.017903,0.025084,0.017392,0.015902,0.016529,0.035585], [0.1479,10.0678], [0.0635,0.0646], [0.0289,0.0256,0.0312,None,0.0224,0.0198,0.0220,0.0205,0.0183,0.0248]),
-        ('C8-DDAC','270.3->158.2', [0.012746,0.012324,0.010552,0.011981,0.012511,0.015686], [1.9238,10.0890], [1.9238,1.7021], [0.0198,0.0176,0.0215,None,0.0154,0.0137,0.0152,0.0141,0.0126,0.0172]),
-        ('C12-DDAC','382.4->214.0', [0.009503,0.012877,0.009371,0.008498,0.009007,0.016294], [0.4065,10.1112], [0.4065,0.5414], [0.0152,0.0135,0.0165,None,0.0118,0.0104,0.0116,0.0108,0.0096,0.0132]),
-        ('C8-ATMAC','172.2->71.1', [0.013368,0.015907,0.009256,0.011528,0.009870,0.011313], [1.5743,10.1334], [1.5743,1.1097], [0.0168,0.0149,0.0182,None,0.0131,0.0115,0.0128,0.0119,0.0106,0.0146]),
-        ('C12-ATMAC','228.3->71.1', [0.161189,0.250358,0.186107,0.199182,0.182527,0.264367], [1.1791,10.1556], [1.1791,0.9213], [0.2567,0.2289,0.2789,None,0.1998,0.1765,0.1956,0.1823,0.1623,0.2234]),
-        ('C8-PFAS','499.0->80.0', [0.001,0.002,0.001,0.002,0.001,0.002], [0.0,10.0], [0.0,0.0], [0.02,0.03,None,0.01,0.04,0.02,0.01,0.03,0.02,0.01]),
-        ('C10-BAC+O','292.3->91.1', [0.000629,0.001272,0.000783,0.001354,0.000741,0.003236], [2.0656,10.1778], [1.8895,1.3102], [0.0021,0.0019,0.0023,None,0.0017,0.0015,0.0016,0.0015,0.0013,0.0018]),
-        ('d7-C12-BAC','311.3->98.1', [0.4801,0.4331,0.5060,0.5890,0.4644,1.0049], [0.275,9.988], [1.1597,0.7278], []),
-        ('d9-C10-ATMAC','209.3->71.1', [0.7596,1.5442,1.0103,0.9204,1.1522,2.0779], [0.200,10.001], [1.2243,0.8579], []),
-    ]
-    for row_idx, (name, ion, blanks, qcs, mss, samps) in enumerate(demo_data):
-        r = 3 + row_idx
-        ws.cell(row=r, column=1, value=name); ws.cell(row=r, column=2, value=ion)
-        for j, v in enumerate(blanks):
-            if v is not None: ws.cell(row=r, column=3+j, value=round(v, 6))
-        for j, v in enumerate(mss):
-            if v is not None: ws.cell(row=r, column=10+j, value=round(v, 6))
-        for j, v in enumerate(samps):
-            if v is not None: ws.cell(row=r, column=12+j, value=round(v, 6))
-    buf = io.BytesIO(); wb.save(buf); buf.seek(0); return buf.getvalue()
-
 demo_path = os.path.join(os.path.dirname(__file__), 'demo_urine_qac_masshunter.xlsx')
 with st.sidebar:
-    use_demo = st.button(t('demo_btn', L), help=t('demo_help', L), use_container_width=True)
+    use_demo = st.button(t('demo_btn', L), help=t('demo_help', L), width='stretch')
 
 if use_demo:
     if os.path.exists(demo_path):
@@ -299,7 +330,7 @@ if use_demo:
             st.session_state.demo_bytes = demo_file.read()
         st.session_state.demo_active = True
     else:
-        st.error('Demo file not found. Please upload your own file.')
+        st.error('Demo file not found. Please upload your own file.' if L == 'en' else '未找到 Demo 文件，请上传自己的文件。')
 
 file_bytes = st.session_state.get('demo_bytes') if st.session_state.get('demo_active') else None
 if uploaded_file:
@@ -308,13 +339,15 @@ if uploaded_file:
     st.session_state.pop('demo_bytes', None)
 
 if st.session_state.get('demo_active') and file_bytes:
-    st.info('Demo 数据已加载：这是可直接处理的尿液 MassHunter 示例；可检查识别结果后点击“开始处理”。')
+    st.info(t('demo_loaded', L))
 
 selected_is = []
 selected_ss = []
 is_spike_concentrations = {}
 ss_concentrations = {}
 matrix_spike_concentrations = {}
+compound_metadata = {}
+mdl_spike_values = {}
 mdl_overrides = {}
 mql_factor = 3.333333
 layout_is_ready = False
@@ -327,14 +360,17 @@ if file_bytes:
         layout_report = validate_input_layout(blanks, mss, samps, target, is_c, ss_c)
         layout_is_ready = layout_report['ready']
         if layout_report['ready']:
-            st.success(f"文件格式检查通过：{layout_report['summary']}")
+            st.success(f"{t('format_ok', L)}: {layout_report['summary']}")
         else:
-            st.error('文件格式检查未通过：' + '；'.join(layout_report['errors']))
+            st.error(t('format_bad', L) + ': ' + '；'.join(layout_report['errors']))
         for message in layout_report['warnings']:
             st.warning(message)
 
         df_raw = read_preview_table(file_bytes)
-        st.dataframe(df_raw.head(8), use_container_width=True)
+        # Raw MassHunter header rows contain text while the data rows contain
+        # numbers.  Displaying every cell as text avoids Arrow mixed-type
+        # coercion warnings without changing the uploaded source data.
+        st.dataframe(df_raw.head(8).fillna('').astype(str), width='stretch')
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric(t('total_cmpd', L), len(all_c))
@@ -347,16 +383,41 @@ if file_bytes:
         col2.metric(t('ms_cols', L), len(mss))
         col3.metric(t('sample_cols', L), len(samps))
 
-        st.subheader(t('roles_header', L))
-        st.caption(t('roles_caption', L))
-        selected_is = st.multiselect(t('is_select', L), all_c, default=is_c)
-        selected_ss = st.multiselect(t('ss_select', L), all_c, default=ss_c)
+        st.subheader(t('classification_header', L))
+        st.caption(t('classification_help', L))
+        classification_seed = []
+        default_roles = resolve_roles(all_c, is_c, ss_c)
+        for name in all_c:
+            meta = compound_metadata_for(name)
+            role = 'IS' if name in default_roles['is_compounds'] else ('SS' if name in default_roles['ss_compounds'] else 'Target')
+            classification_seed.append({
+                t('classification_name', L): name,
+                t('classification_type', L): meta['type'],
+                t('classification_chain', L): meta['chain_length'],
+                t('classification_role', L): role_label(role, L),
+            })
+        classification_table = st.data_editor(
+            pd.DataFrame(classification_seed), hide_index=True, width='stretch',
+            disabled=[t('classification_name', L)],
+            column_config={
+                t('classification_role', L): st.column_config.SelectboxColumn(options=t('role_options', L)),
+            }, key='compound_classification_editor',
+        )
+        for _, item in classification_table.iterrows():
+            name = item[t('classification_name', L)]
+            compound_metadata[name] = {
+                'type': str(item[t('classification_type', L)] or 'Other'),
+                'chain_length': str(item[t('classification_chain', L)] or 'NA'),
+                'role': role_from_label(item[t('classification_role', L)]),
+            }
+        selected_is = [name for name, meta in compound_metadata.items() if meta['role'] == 'IS']
+        selected_ss = [name for name, meta in compound_metadata.items() if meta['role'] == 'SS']
         custom_is, custom_is_errors = parse_custom_ss_entries(custom_is_text)
         for message in custom_is_errors:
             st.error(message.replace('SS', 'IS'))
         missing_custom_is = [name for name in custom_is if name not in all_c]
         if missing_custom_is:
-            st.error('未在上传文件中找到自定义 IS：' + ', '.join(missing_custom_is))
+            st.error(t('custom_is_missing', L) + ', '.join(missing_custom_is))
         valid_custom_is = [name for name in custom_is if name in all_c]
         selected_is = list(dict.fromkeys(selected_is + valid_custom_is))
         custom_ss, custom_ss_errors = parse_custom_ss_entries(custom_ss_text)
@@ -364,34 +425,36 @@ if file_bytes:
             st.error(message)
         missing_custom_ss = [name for name in custom_ss if name not in all_c]
         if missing_custom_ss:
-            st.error('未在上传文件中找到自定义 SS：' + ', '.join(missing_custom_ss))
+            st.error(t('custom_ss_missing', L) + ', '.join(missing_custom_ss))
         valid_custom_ss = [name for name in custom_ss if name in all_c]
         selected_ss = list(dict.fromkeys(selected_ss + valid_custom_ss))
         overlap = set(selected_is) & set(selected_ss)
         if overlap:
-            st.error(f'同一化合物不能同时作为 IS 与 SS：{sorted(overlap)}')
+            st.error(t('role_overlap', L) + str(sorted(overlap)))
         if mss:
             st.subheader(t('ms_spike_header', L))
             st.caption(t('ms_spike_help', L))
             st.info(t('ms_spike_example', L))
             roles_for_ms = resolve_roles(all_c, selected_is, selected_ss)
             ms_rows = []
-            for role, names in (('目标物', roles_for_ms['target_compounds']), ('SS', roles_for_ms['ss_compounds']), ('IS', roles_for_ms['is_compounds'])):
+            compound_column = t('ms_table_compound', L)
+            role_column = t('ms_table_role', L)
+            for role, names in (('Target', roles_for_ms['target_compounds']), ('SS', roles_for_ms['ss_compounds']), ('IS', roles_for_ms['is_compounds'])):
                 for name in names:
                     default_concentration = (
                         float(custom_ss.get(name, 4.0)) if role == 'SS'
                         else float(custom_is.get(name, 4.0)) if role == 'IS'
                         else float(spike_conc)
                     )
-                    ms_rows.append({'化合物名称': name, '类型/角色': role, **{header: default_concentration for _, _, header in mss}})
+                    ms_rows.append({compound_column: name, role_column: role_label(role, L), **{header: default_concentration for _, _, header in mss}})
             ms_table = st.data_editor(
                 pd.DataFrame(ms_rows),
                 column_config={header: st.column_config.NumberColumn(header, min_value=0.000001, step=0.1, format='%.6f') for _, _, header in mss},
-                disabled=['化合物名称', '类型/角色'], hide_index=True, use_container_width=True,
+                disabled=[compound_column, role_column], hide_index=True, width='stretch',
                 key='compound_matrix_spike_concentration_table',
             )
             matrix_spike_concentrations = {
-                row['化合物名称']: {header: float(row[header]) for _, _, header in mss}
+                row[compound_column]: {header: float(row[header]) for _, _, header in mss}
                 for _, row in ms_table.iterrows()
             }
         # The two-dimensional MS table is the source of truth.  Keep these
@@ -406,8 +469,8 @@ if file_bytes:
             st.write(f"**{t('target_label', L)}**:", ", ".join(roles_for_display['target_compounds']) if roles_for_display['target_compounds'] else "-")
             st.write(f"**{t('is_label', L)}**:", ", ".join(roles_for_display['is_compounds']) if roles_for_display['is_compounds'] else "-")
             st.write(f"**{t('ss_label', L)}**:", ", ".join(roles_for_display['ss_compounds']) if roles_for_display['ss_compounds'] else "-")
-            classification_rows = compound_classification_rows(all_c, selected_is, selected_ss)
-            st.dataframe(pd.DataFrame(classification_rows), use_container_width=True, hide_index=True)
+            classification_rows = compound_classification_rows(all_c, selected_is, selected_ss, compound_metadata)
+            st.dataframe(pd.DataFrame(classification_rows), width='stretch', hide_index=True)
 
         with st.expander(t('blank_zero_header', L)):
             detected_blank_zero = detect_blank_zero_compounds(raw_data, blanks)
@@ -434,10 +497,20 @@ if file_bytes:
                             'signal_to_noise': sn,
                         }
 
-        mql_factor = st.number_input(
-            'MQL / MDL 倍数', min_value=0.000001, value=3.333333,
-            step=0.1, format='%.6f', help=t('mql_help', L)
-        )
+        low_spike_entries, low_spike_errors = parse_low_spike_entries(low_spike_text)
+        for message in low_spike_errors:
+            st.error(message)
+        missing_low_spikes = [name for name in low_spike_entries if name not in all_c]
+        if missing_low_spikes:
+            st.error(t('low_spike_missing', L) + ', '.join(missing_low_spikes))
+        mdl_spike_values = {name: values for name, values in low_spike_entries.items() if name in all_c}
+        missing_low_spike_targets = [
+            name for name in resolve_roles(all_c, selected_is, selected_ss)['target_compounds']
+            if name not in detected_blank_zero and len(mdl_spike_values.get(name, [])) < 2
+        ]
+        if missing_low_spike_targets:
+            st.warning(t('low_spike_incomplete', L) + ', '.join(missing_low_spike_targets))
+
 
     except Exception as e:
         st.warning(f"{t('preview_warn', L)}: {e}")
@@ -446,7 +519,7 @@ if file_bytes:
 # 处理按钮
 # ============================================================
 st.divider()
-process_btn = st.button(t('process_btn', L), type="primary", disabled=(file_bytes is None or not layout_is_ready), use_container_width=True)
+process_btn = st.button(t('process_btn', L), type="primary", disabled=(file_bytes is None or not layout_is_ready), width='stretch')
 
 if process_btn and file_bytes:
     with st.spinner(t('processing', L)):
@@ -459,13 +532,15 @@ if process_btn and file_bytes:
             'conversion_factor': float(conversion_factor),
             'spike_conc_ppb': int(spike_conc),
             'matrix_spike_concentrations': matrix_spike_concentrations,
+            'compound_metadata': compound_metadata,
             'is_compounds': selected_is,
             'is_spike_concentrations': is_spike_concentrations,
             'is_corrected': is_corrected,
             'ss_compounds': selected_ss,
             'ss_spike_concentrations': ss_concentrations,
             'mdl_overrides': mdl_overrides,
-            'mql_factor': float(mql_factor),
+            'mdl_spike_values': mdl_spike_values,
+            'language': L,
             'masshunter_unit': 'ppb',
             'output_unit': output_unit,
             'blank_handling': 'ND',
@@ -486,12 +561,12 @@ if process_btn and file_bytes:
             if preview_rows:
                 st.subheader(t('preview_stats', L))
                 st.caption(t('preview_stats_help', L))
-                st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
+                st.dataframe(pd.DataFrame(preview_rows), width='stretch')
 
             final_preview_rows = compute_preview_final_table(raw_data, blanks, samps, preview_cfg)
             if final_preview_rows:
                 st.subheader(t('preview_final', L))
-                st.dataframe(pd.DataFrame(final_preview_rows), use_container_width=True)
+                st.dataframe(pd.DataFrame(final_preview_rows), width='stretch')
 
             st.subheader(t('result_preview', L))
             if output_format == 'CSV':
@@ -502,14 +577,14 @@ if process_btn and file_bytes:
                 csv_rows = list(csv.reader(io.StringIO(output_bytes.decode('utf-8-sig'))))
                 width = max((len(row) for row in csv_rows), default=0)
                 csv_preview = pd.DataFrame([row + [''] * (width - len(row)) for row in csv_rows])
-                st.dataframe(csv_preview, use_container_width=True)
+                st.dataframe(csv_preview, width='stretch')
             else:
                 # openpyxl cannot calculate formulas. Show the numerically evaluated
                 # previews above instead of exposing formula strings in the result view.
                 st.info(t('preview_stats_help', L))
-                st.caption('Excel 下载文件保留可审计公式；在线预览显示按同一规则计算的数值。')
-                st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
-                st.dataframe(pd.DataFrame(final_preview_rows), use_container_width=True)
+                st.caption(t('result_formula_note', L))
+                st.dataframe(pd.DataFrame(preview_rows), width='stretch')
+                st.dataframe(pd.DataFrame(final_preview_rows), width='stretch')
 
             st.divider()
             st.download_button(
@@ -517,7 +592,7 @@ if process_btn and file_bytes:
                 data=output_bytes,
                 file_name=filename,
                 mime=("text/csv" if output_format == 'CSV' else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-                use_container_width=True,
+                width='stretch',
                 type="primary",
             )
 

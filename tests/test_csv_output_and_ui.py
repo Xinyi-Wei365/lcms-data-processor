@@ -20,9 +20,29 @@ class CsvOutputAndUiTests(unittest.TestCase):
             'ss_spike_concentrations': {'d7-C12-BAC': 4},
             'spike_conc_ppb': 10, 'conversion_factor': 1,
         }, return_bytes=True)
-        self.assertIn(b'Final concentration summary', output)
+        self.assertIn('最终浓度'.encode('utf-8'), output)
         self.assertIn(b'Median (Q1-Q3)', output)
         self.assertNotIn(b'=', output)
+
+    def test_csv_uses_selected_language_and_records_each_is_ms_addition(self):
+        raw = (
+            'Name,Ion,BLANK1,BLANK2,MS1,MS2,F1\n'
+            'C8-BAC,248>91,0.1,0.2,10,20,0.5\n'
+            'My Internal Standard,300>100,0.1,0.2,4,8,4\n'
+        ).encode('utf-8')
+        output, _ = processor.process({
+            'input_bytes': raw, 'input_file': '', 'output_format': 'csv',
+            'output_file': 'processed.csv', 'language': 'zh',
+            'is_compounds': ['My Internal Standard'],
+            'matrix_spike_concentrations': {
+                'My Internal Standard': {'MS1': 4, 'MS2': 8},
+            },
+        }, return_bytes=True)
+
+        text = output.decode('utf-8-sig')
+        self.assertIn('名称,链长,DF (%),Median (Q1-Q3),MDL,MQL', text)
+        self.assertIn('IS 加入浓度记录（仅记录）,MS1,MS2,是否经过 IS 校正', text)
+        self.assertIn('My Internal Standard,4.0,8.0,否', text)
 
     def test_language_labels_are_available_in_both_languages(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
@@ -31,6 +51,18 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn("'en': 'Upload Raw Data (XLSX or CSV)'", source)
         self.assertIn("'en': 'Compound Roles'", source)
         self.assertIn("'en': 'Blank-zero MDL settings'", source)
+
+    def test_english_ui_localizes_matrix_spike_table_headers_and_roles(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("'ms_table_compound'", source)
+        self.assertIn("'ms_table_role'", source)
+        self.assertIn("role_label(role, L)", source)
+
+    def test_raw_preview_uses_display_safe_text_to_avoid_mixed_arrow_columns(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("df_raw.head(8).fillna('').astype(str)", source)
 
     def test_ui_keeps_one_is_correction_question(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
@@ -94,10 +126,16 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertNotIn("key=f'ss_conc_{name}'", source)
         self.assertNotIn("key=f'is_conc_{name}'", source)
 
+    def test_ui_warns_when_nonzero_blank_targets_lack_low_spike_replicates(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("'low_spike_incomplete'", source)
+        self.assertIn('missing_low_spike_targets', source)
+
     def test_classification_table_updates_after_user_confirms_is_and_ss_roles(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn('compound_classification_rows(all_c, selected_is, selected_ss)', source)
+        self.assertIn('compound_classification_rows(all_c, selected_is, selected_ss, compound_metadata)', source)
 
     def test_is_addition_concentrations_are_recorded_without_changing_final_concentration_rule(self):
         raw = (
@@ -115,7 +153,9 @@ class CsvOutputAndUiTests(unittest.TestCase):
         workbook = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
         info = workbook['计算说明']
         rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
-        self.assertIn(['IS addition record', 'My Internal Standard', '4 ppb', 'Recorded only; IS correction applied: yes. Does not change concentration formulas.'], rows)
+        marker = ['IS additions, ppb  内标加入浓度（仅记录）', 'MS1', '是否IS校正', None]
+        self.assertIn(marker, rows)
+        self.assertEqual(rows[rows.index(marker) + 1], ['My Internal Standard', None, 'yes', None])
 
 
 if __name__ == '__main__':

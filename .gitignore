@@ -4,3 +4,4 @@ __pycache__/
 *.xlsx
 !sample_*.xlsx
 !demo_urine_qac_masshunter.xlsx
+*.inspect.ndjson
