@@ -11,7 +11,7 @@ import os
 import io
 from process_lcms_data import (
     process, read_raw, classify_compounds, resolve_roles,
-    compute_preview_summary, compute_preview_final_table, detect_blank_zero_compounds,
+    compute_preview_summary, compute_preview_final_table, build_blank_mdl_evidence,
     parse_custom_ss_entries, compound_classification_rows, compound_metadata_for,
 )
 
@@ -106,7 +106,7 @@ T = {
     'classification_chain': {'zh': '链长', 'en': 'Chain length'},
     'classification_role': {'zh': '角色', 'en': 'Role'},
     'role_options': {'zh': ['目标物', '替代物 (SS)', '内标 (IS)'], 'en': ['Target', 'Surrogate (SS)', 'Internal standard (IS)']},
-    'blank_zero_header':    {'zh': 'blank=0 的 MDL 设置',                        'en': 'Blank-zero MDL settings'},
+    'blank_zero_header':    {'zh': 'Blank/MDL 逐化合物设置',                      'en': 'Per-compound Blank/MDL settings'},
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
     'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
@@ -117,15 +117,35 @@ T = {
                              'en': 'One per line: “name, addition concentration (ppb)”. Names must match the uploaded file. Values are recorded in output only and do not alter concentration calculations; IS correction is controlled solely by the question above.'},
     'custom_is_placeholder': {'zh': 'C13-Internal Standard, 4\nMy Internal Standard, 2.5',
                               'en': 'C13-Internal Standard, 4\nMy Internal Standard, 2.5'},
-    'blank_zero_select':    {'zh': '选择 blank=0 的化合物',                         'en': 'Select blank=0 compounds'},
-    'blank_zero_help':      {'zh': '对每个所选化合物输入标曲浓度和对应 S/N：MDL = 3 × 标曲浓度 ÷ S/N。', 'en': 'Enter calibration concentration and S/N for each selected compound: MDL = 3 × calibration concentration ÷ S/N.'},
+    'blank_zero_help':      {'zh': '系统逐化合物判断：全部 blank 为数值0时填写标曲浓度和 S/N；blank 含非零值时自动使用均值、动态 t 值和 SD。', 'en': 'Each compound is evaluated independently: enter calibration concentration and S/N when every blank is numeric zero; non-zero blanks use mean, dynamic t and SD automatically.'},
     'calibration':          {'zh': '标曲浓度 (ppb)',                              'en': 'Calibration concentration (ppb)'},
     'sn':                   {'zh': 'S/N',                                         'en': 'S/N'},
     'mql_help':             {'zh': '默认 3.333333；请按实验室方法确认。',              'en': 'Default 3.333333; confirm with your laboratory method.'},
-    'low_spike_header': {'zh': '低浓度加标重复值（用于 blank≠0 的动态 t 值 MDL）', 'en': 'Low-level spike replicates (dynamic-t MDL when blank is not zero)'},
-    'low_spike_help': {'zh': '每行填写“化合物名称, 值1, 值2, …”。这些必须是同一低浓度、完整前处理的平行加标结果；不同浓度的 MS1/MS2/MS3 不能混填。未填写时仅使用空白分支计算 MDL。', 'en': 'One line per compound: “name, value1, value2, …”. Values must be same-level, full-method low-spike replicates; do not mix MS1/MS2/MS3 at different concentrations. Without them, only the blank branch is used.'},
-    'low_spike_placeholder': {'zh': 'C8-BAC, 0.90, 1.00, 1.10, 1.00, 1.00, 0.90, 1.10', 'en': 'C8-BAC, 0.90, 1.00, 1.10, 1.00, 1.00, 0.90, 1.10'},
-    'low_spike_incomplete': {'zh': '以下目标物未填写至少 2 个同浓度低浓度加标重复值；MDL/MQL 将只使用空白分支，不能代表完整的双分支方法：', 'en': 'The following targets have fewer than two same-level low-spike replicates; MDL/MQL will use only the blank branch and will not represent the full two-branch method: '},
+    'calculation_evidence': {'zh': '计算依据', 'en': 'Calculation evidence'},
+    'evidence_compound': {'zh': '化合物', 'en': 'Compound'},
+    'evidence_values': {'zh': '有效 blank 值', 'en': 'Valid blank values'},
+    'evidence_valid': {'zh': '有效数 n', 'en': 'Valid n'},
+    'evidence_nonzero': {'zh': '非零数', 'en': 'Non-zero n'},
+    'evidence_status': {'zh': '系统判断', 'en': 'System decision'},
+    'evidence_action': {'zh': '处理/操作', 'en': 'Treatment / action'},
+    'evidence_mdl': {'zh': '瓶内MDL预览 (ppb)', 'en': 'Vial MDL preview (ppb)'},
+    'evidence_blank_zero': {'zh': 'blank=0', 'en': 'blank=0'},
+    'evidence_blank_nonzero': {'zh': 'blank≠0', 'en': 'blank≠0'},
+    'evidence_missing': {'zh': '无有效blank', 'en': 'No valid blanks'},
+    'evidence_insufficient': {'zh': '有效blank不足', 'en': 'Insufficient blanks'},
+    'evidence_incomplete': {'zh': 'blank数据不完整', 'en': 'Incomplete blank data'},
+    'evidence_enter_snr': {'zh': '填写标曲浓度和S/N', 'en': 'Enter calibration concentration and S/N'},
+    'evidence_automatic': {'zh': '系统自动计算', 'en': 'Calculated automatically'},
+    'evidence_unavailable': {'zh': '不能计算，请检查blank数据', 'en': 'Cannot calculate; check blank data'},
+    'evidence_formula': {'zh': '代入公式', 'en': 'Substituted formula'},
+    'evidence_df': {'zh': '自由度', 'en': 'Degrees of freedom'},
+    'evidence_t': {'zh': '单侧99% t值', 'en': 'One-sided 99% t'},
+    'evidence_mean': {'zh': 'blank平均值', 'en': 'Blank mean'},
+    'evidence_sd': {'zh': 'blank标准差', 'en': 'Blank SD'},
+    'evidence_reason_blank_zero': {'zh': 'blank=0时必须填写大于0的标曲浓度和S/N。', 'en': 'blank=0 requires a positive calibration concentration and S/N.'},
+    'evidence_reason_missing': {'zh': '没有找到有效的blank测定结果。', 'en': 'No valid blank results were found.'},
+    'evidence_reason_insufficient': {'zh': '至少需要2个有效blank结果才能计算标准差。', 'en': 'At least two valid blank results are required to calculate a standard deviation.'},
+    'evidence_reason_incomplete': {'zh': 'blank中存在缺失单元格；只有每个blank均为数值0时才属于blank=0。', 'en': 'Blank cells are missing; blank=0 requires every blank cell to be numeric zero.'},
     'preview_stats':        {'zh': '描述性统计（在线数值预览）',                     'en': 'Descriptive statistics (numeric preview)'},
     'preview_stats_help':   {'zh': '这里显示已计算的数值；下载的 Excel 同时保留可审计公式。', 'en': 'Calculated values are shown here; downloaded Excel retains auditable formulas.'},
     'preview_final':        {'zh': '最终浓度（在线数值预览）',                       'en': 'Final concentrations (numeric preview)'},
@@ -160,7 +180,6 @@ T = {
     'custom_is_missing': {'zh': '未在上传文件中找到自定义 IS：', 'en': 'Custom IS was not found in the uploaded file: '},
     'custom_ss_missing': {'zh': '未在上传文件中找到自定义 SS：', 'en': 'Custom SS was not found in the uploaded file: '},
     'role_overlap': {'zh': '同一化合物不能同时作为 IS 与 SS：', 'en': 'An analyte cannot be both IS and SS: '},
-    'low_spike_missing': {'zh': '未在上传文件中找到低浓度加标化合物：', 'en': 'Low-spike compound was not found in the uploaded file: '},
 }
 
 def t(key, lang='zh'):
@@ -168,28 +187,6 @@ def t(key, lang='zh'):
     if key in T:
         return T[key].get(lang, T[key].get('zh', key))
     return key
-
-
-def parse_low_spike_entries(text):
-    """Parse same-level low-spike replicates: name, value1, value2, ..."""
-    entries, errors = {}, []
-    for line_number, raw_line in enumerate(str(text or '').splitlines(), 1):
-        parts = [part.strip() for part in raw_line.split(',') if part.strip()]
-        if not parts:
-            continue
-        if len(parts) < 3:
-            errors.append(f'Line {line_number}: enter name plus at least two replicate values.')
-            continue
-        try:
-            values = [float(value) for value in parts[1:]]
-        except ValueError:
-            errors.append(f'Line {line_number}: replicate values must be numeric.')
-            continue
-        if any(value < 0 for value in values):
-            errors.append(f'Line {line_number}: replicate values cannot be negative.')
-            continue
-        entries[parts[0]] = values
-    return entries, errors
 
 
 def role_label(role, language):
@@ -298,13 +295,6 @@ with st.sidebar:
         label_visibility='collapsed',
     )
 
-    st.subheader(t('low_spike_header', L))
-    st.caption(t('low_spike_help', L))
-    low_spike_text = st.text_area(
-        t('low_spike_header', L), value='', placeholder=t('low_spike_placeholder', L),
-        key='low_spike_text', label_visibility='collapsed',
-    )
-
     st.divider()
     st.header(t('file_header', L))
     uploaded_file = st.file_uploader(t('upload_label', L), type=["xlsx", "xls", "csv", "tsv"])
@@ -347,10 +337,10 @@ is_spike_concentrations = {}
 ss_concentrations = {}
 matrix_spike_concentrations = {}
 compound_metadata = {}
-mdl_spike_values = {}
 mdl_overrides = {}
 mql_factor = 3.333333
 layout_is_ready = False
+mdl_evidence_ready = False
 
 if file_bytes:
     st.subheader(t('raw_preview', L))
@@ -472,44 +462,89 @@ if file_bytes:
             classification_rows = compound_classification_rows(all_c, selected_is, selected_ss, compound_metadata)
             st.dataframe(pd.DataFrame(classification_rows), width='stretch', hide_index=True)
 
-        with st.expander(t('blank_zero_header', L)):
-            detected_blank_zero = detect_blank_zero_compounds(raw_data, blanks)
-            blank_zero_compounds = st.multiselect(
-                t('blank_zero_select', L), all_c,
-                default=[name for name in detected_blank_zero if name in all_c],
-            )
-            if blank_zero_compounds:
-                st.caption(t('blank_zero_help', L))
-                mdl_cols = st.columns(min(3, len(blank_zero_compounds)))
-                for i, name in enumerate(blank_zero_compounds):
-                    with mdl_cols[i % len(mdl_cols)]:
-                        calibration = st.number_input(
-                            f'{name} {t("calibration", L)}', min_value=0.0, value=0.0,
-                            step=0.1, key=f'mdl_cal_{name}'
-                        )
-                        sn = st.number_input(
-                            f'{name} {t("sn", L)}', min_value=0.0, value=0.0,
-                            step=1.0, key=f'mdl_sn_{name}'
-                        )
-                        mdl_overrides[name] = {
-                            'blank_zero': True,
-                            'calibration_concentration': calibration,
-                            'signal_to_noise': sn,
-                        }
+        target_compounds = resolve_roles(all_c, selected_is, selected_ss)['target_compounds']
+        st.subheader(t('blank_zero_header', L))
+        st.caption(t('blank_zero_help', L))
 
-        low_spike_entries, low_spike_errors = parse_low_spike_entries(low_spike_text)
-        for message in low_spike_errors:
-            st.error(message)
-        missing_low_spikes = [name for name in low_spike_entries if name not in all_c]
-        if missing_low_spikes:
-            st.error(t('low_spike_missing', L) + ', '.join(missing_low_spikes))
-        mdl_spike_values = {name: values for name, values in low_spike_entries.items() if name in all_c}
-        missing_low_spike_targets = [
-            name for name in resolve_roles(all_c, selected_is, selected_ss)['target_compounds']
-            if name not in detected_blank_zero and len(mdl_spike_values.get(name, [])) < 2
-        ]
-        if missing_low_spike_targets:
-            st.warning(t('low_spike_incomplete', L) + ', '.join(missing_low_spike_targets))
+        blank_values_by_compound = {
+            name: [raw_data.get(name, {}).get(column_letter) for _, column_letter, _ in blanks]
+            for name in target_compounds
+        }
+        for name in target_compounds:
+            preliminary = build_blank_mdl_evidence(name, blank_values_by_compound[name], {})
+            if preliminary['status'] == 'blank_zero':
+                input_col1, input_col2 = st.columns(2)
+                with input_col1:
+                    calibration = st.number_input(
+                        f'{name} {t("calibration", L)}', min_value=0.0, value=0.0,
+                        step=0.1, key=f'mdl_cal_{name}'
+                    )
+                with input_col2:
+                    sn = st.number_input(
+                        f'{name} {t("sn", L)}', min_value=0.0, value=0.0,
+                        step=1.0, key=f'mdl_sn_{name}'
+                    )
+                mdl_overrides[name] = {
+                    'blank_zero': True,
+                    'calibration_concentration': calibration,
+                    'signal_to_noise': sn,
+                }
+
+        evidence_cfg = {'mdl_overrides': mdl_overrides}
+        blank_evidence = {
+            name: build_blank_mdl_evidence(name, blank_values_by_compound[name], evidence_cfg)
+            for name in target_compounds
+        }
+        status_labels = {
+            'blank_zero': t('evidence_blank_zero', L),
+            'blank_nonzero': t('evidence_blank_nonzero', L),
+            'missing': t('evidence_missing', L),
+            'insufficient': t('evidence_insufficient', L),
+            'incomplete': t('evidence_incomplete', L),
+        }
+        blank_evidence_rows = []
+        for name, evidence in blank_evidence.items():
+            action = (
+                t('evidence_enter_snr', L) if evidence['status'] == 'blank_zero' and not evidence['ready']
+                else t('evidence_automatic', L) if evidence['ready']
+                else t('evidence_unavailable', L)
+            )
+            blank_evidence_rows.append({
+                t('evidence_compound', L): name,
+                t('evidence_values', L): ', '.join(f'{value:g}' for value in evidence['blank_values']) or '-',
+                t('evidence_valid', L): evidence['valid_count'],
+                t('evidence_nonzero', L): evidence['nonzero_count'],
+                t('evidence_status', L): status_labels.get(evidence['status'], evidence['status']),
+                t('evidence_action', L): action,
+                t('evidence_mdl', L): evidence['mdl'],
+            })
+        st.dataframe(pd.DataFrame(blank_evidence_rows), width='stretch', hide_index=True)
+
+        with st.expander(t('calculation_evidence', L)):
+            reason_labels = {
+                'blank_zero': t('evidence_reason_blank_zero', L),
+                'missing': t('evidence_reason_missing', L),
+                'insufficient': t('evidence_reason_insufficient', L),
+                'incomplete': t('evidence_reason_incomplete', L),
+            }
+            for name, evidence in blank_evidence.items():
+                st.markdown(f'**{name} — {status_labels.get(evidence["status"], evidence["status"])}**')
+                st.write(f'{t("evidence_values", L)}: {evidence["blank_values"] or "-"}')
+                st.write(f'{t("evidence_valid", L)}: {evidence["valid_count"]}; {t("evidence_nonzero", L)}: {evidence["nonzero_count"]}')
+                if evidence['status'] == 'blank_nonzero':
+                    st.write(
+                        f'{t("evidence_df", L)}: {evidence["degrees_of_freedom"]}; '
+                        f'{t("evidence_t", L)}: {evidence["t_value"]:.6g}; '
+                        f'{t("evidence_mean", L)}: {evidence["mean"]:.6g}; '
+                        f'{t("evidence_sd", L)}: {evidence["sd"]:.6g}'
+                    )
+                if evidence['ready']:
+                    st.code(f'{t("evidence_formula", L)}: {evidence["formula"]} = {evidence["mdl"]:.6g} ppb')
+                else:
+                    st.warning(reason_labels.get(evidence['status'], evidence['reason']))
+                st.divider()
+
+        mdl_evidence_ready = bool(target_compounds) and all(item['ready'] for item in blank_evidence.values())
 
 
     except Exception as e:
@@ -519,7 +554,11 @@ if file_bytes:
 # 处理按钮
 # ============================================================
 st.divider()
-process_btn = st.button(t('process_btn', L), type="primary", disabled=(file_bytes is None or not layout_is_ready), width='stretch')
+process_btn = st.button(
+    t('process_btn', L), type="primary",
+    disabled=(file_bytes is None or not layout_is_ready or not mdl_evidence_ready),
+    width='stretch',
+)
 
 if process_btn and file_bytes:
     with st.spinner(t('processing', L)):
@@ -539,7 +578,6 @@ if process_btn and file_bytes:
             'ss_compounds': selected_ss,
             'ss_spike_concentrations': ss_concentrations,
             'mdl_overrides': mdl_overrides,
-            'mdl_spike_values': mdl_spike_values,
             'language': L,
             'masshunter_unit': 'ppb',
             'output_unit': output_unit,

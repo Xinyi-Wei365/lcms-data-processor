@@ -50,7 +50,7 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn("'zh': '上传原始数据（XLSX 或 CSV）'", source)
         self.assertIn("'en': 'Upload Raw Data (XLSX or CSV)'", source)
         self.assertIn("'en': 'Compound Roles'", source)
-        self.assertIn("'en': 'Blank-zero MDL settings'", source)
+        self.assertIn("'en': 'Per-compound Blank/MDL settings'", source)
 
     def test_english_ui_localizes_matrix_spike_table_headers_and_roles(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
@@ -126,11 +126,23 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertNotIn("key=f'ss_conc_{name}'", source)
         self.assertNotIn("key=f'is_conc_{name}'", source)
 
-    def test_ui_warns_when_nonzero_blank_targets_lack_low_spike_replicates(self):
+    def test_ui_shows_per_compound_blank_mdl_calculation_evidence(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn("'low_spike_incomplete'", source)
-        self.assertIn('missing_low_spike_targets', source)
+        self.assertIn("'calculation_evidence'", source)
+        self.assertIn("'zh': '计算依据'", source)
+        self.assertIn("'en': 'Calculation evidence'", source)
+        self.assertIn('build_blank_mdl_evidence', source)
+        self.assertIn('blank_evidence_rows', source)
+        self.assertIn('degrees_of_freedom', source)
+        self.assertIn("'evidence_reason_missing'", source)
+
+    def test_ui_removes_low_spike_replicate_input(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertNotIn('low_spike_text', source)
+        self.assertNotIn('parse_low_spike_entries', source)
+        self.assertNotIn("'low_spike_header'", source)
 
     def test_classification_table_updates_after_user_confirms_is_and_ss_roles(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:

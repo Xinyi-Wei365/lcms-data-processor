@@ -480,14 +480,97 @@ def one_sided_t99(sample_count):
 
 
 def calculate_nonzero_blank_mdl(spike_values, blank_values):
-    """Calculate MAX(t*S_spike, mean(blank)+t*S_blank) in bottle units."""
-    spike = [safe_float(value) for value in spike_values if safe_float(value) is not None]
+    """Calculate mean(blank) + t(0.99,n-1) * SD(blank) in bottle units."""
     blanks = [safe_float(value) for value in blank_values if safe_float(value) is not None]
-    if len(spike) < 2 or len(blanks) < 2:
-        raise ValueError('MDL requires at least two low-level spike and two blank replicates.')
-    spike_branch = one_sided_t99(len(spike)) * statistics.stdev(spike)
-    blank_branch = statistics.mean(blanks) + one_sided_t99(len(blanks)) * statistics.stdev(blanks)
-    return max(spike_branch, blank_branch)
+    if len(blanks) < 2:
+        raise ValueError('MDL requires at least two valid blank replicates.')
+    return statistics.mean(blanks) + one_sided_t99(len(blanks)) * statistics.stdev(blanks)
+
+
+def _compact_number(value):
+    value = safe_float(value)
+    return '' if value is None else f'{value:g}'
+
+
+def build_blank_mdl_evidence(compound, blank_values, cfg):
+    """Return the auditable per-compound evidence used for the vial MDL."""
+    raw_values = list(blank_values or [])
+    values = [safe_float(value) for value in raw_values if safe_float(value) is not None]
+    valid_count = len(values)
+    nonzero_count = sum(value != 0 for value in values)
+    evidence = {
+        'compound': compound,
+        'blank_values': values,
+        'valid_count': valid_count,
+        'nonzero_count': nonzero_count,
+        'status': None,
+        'ready': False,
+        'mean': None,
+        'sd': None,
+        'degrees_of_freedom': None,
+        't_value': None,
+        'calibration_concentration': None,
+        'signal_to_noise': None,
+        'formula': None,
+        'mdl': None,
+        'reason': None,
+    }
+
+    if valid_count == 0:
+        evidence.update(status='missing', reason='No valid blank results were found.')
+        return evidence
+
+    all_cells_numeric_zero = (
+        bool(raw_values)
+        and valid_count == len(raw_values)
+        and nonzero_count == 0
+    )
+    if all_cells_numeric_zero:
+        evidence['status'] = 'blank_zero'
+        override = (cfg.get('mdl_overrides') or {}).get(compound) or {}
+        concentration = safe_float(override.get('calibration_concentration'))
+        signal_to_noise = safe_float(override.get('signal_to_noise'))
+        evidence['calibration_concentration'] = concentration
+        evidence['signal_to_noise'] = signal_to_noise
+        if concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
+            evidence['reason'] = 'blank=0 requires a positive calibration concentration and S/N.'
+            return evidence
+        evidence['ready'] = True
+        evidence['formula'] = f'3 × {_compact_number(concentration)} ÷ {_compact_number(signal_to_noise)}'
+        evidence['mdl'] = 3 * concentration / signal_to_noise
+        return evidence
+
+    if valid_count < 2:
+        evidence.update(
+            status='insufficient',
+            reason='At least two valid blank results are required to calculate a standard deviation.',
+        )
+        return evidence
+
+    if nonzero_count == 0:
+        evidence.update(
+            status='incomplete',
+            reason='Blank cells are missing; blank=0 requires every blank cell to be numeric zero.',
+        )
+        return evidence
+
+    mean_value = statistics.mean(values)
+    sd_value = statistics.stdev(values)
+    t_value = one_sided_t99(valid_count)
+    evidence.update(
+        status='blank_nonzero',
+        ready=True,
+        mean=mean_value,
+        sd=sd_value,
+        degrees_of_freedom=valid_count - 1,
+        t_value=t_value,
+        formula=(
+            f'{_compact_number(mean_value)} + {_compact_number(t_value)} × '
+            f'{_compact_number(sd_value)}'
+        ),
+        mdl=mean_value + t_value * sd_value,
+    )
+    return evidence
 
 
 def _excel_array(values):
@@ -505,16 +588,6 @@ def mdl_formula(name, blank_range, cfg):
         if signal_to_noise is None or signal_to_noise <= 0:
             raise ValueError(f'{name}: signal-to-noise must be positive for S/N MDL.')
         return f'=3*{concentration}/{signal_to_noise}'
-    spike_values = (cfg.get('mdl_spike_values') or {}).get(name) or []
-    spike_values = [safe_float(value) for value in spike_values if safe_float(value) is not None]
-    if len(spike_values) >= 2:
-        spike_array = _excel_array(spike_values)
-        return (
-            f'=MAX(T.INV(0.99,COUNT({spike_array})-1)*STDEV.S({spike_array}),'
-            f'AVERAGE({blank_range})+T.INV(0.99,COUNT({blank_range})-1)*STDEV.S({blank_range}))'
-        )
-    # Backward-compatible fallback for legacy exports. The UI marks this
-    # incomplete and prompts for the required low-level spike replicates.
     return f'=AVERAGE({blank_range})+T.INV(0.99,COUNT({blank_range})-1)*STDEV.S({blank_range})'
 
 
@@ -534,7 +607,7 @@ def mdl_report_formula(name, bottle_ref, cfg):
 
 
 def mql_formula(name, blank_range, cfg):
-    """Return MQL in bottle units: max(10*S_spike, mean(blank)+10*S_blank)."""
+    """Return MQL in bottle units using the selected blank path."""
     override = (cfg.get('mdl_overrides') or {}).get(name) or {}
     if override.get('blank_zero'):
         concentration = safe_float(override.get('calibration_concentration'))
@@ -542,11 +615,6 @@ def mql_formula(name, blank_range, cfg):
         if concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
             raise ValueError(f'{name}: calibration concentration and S/N must be positive.')
         return f'=10*{concentration}/{signal_to_noise}'
-    spike_values = (cfg.get('mdl_spike_values') or {}).get(name) or []
-    spike_values = [safe_float(value) for value in spike_values if safe_float(value) is not None]
-    if len(spike_values) >= 2:
-        spike_array = _excel_array(spike_values)
-        return f'=MAX(10*STDEV.S({spike_array}),AVERAGE({blank_range})+10*STDEV.S({blank_range}))'
     return f'=AVERAGE({blank_range})+10*STDEV.S({blank_range})'
 
 
@@ -610,28 +678,20 @@ def validate_blank_zero_mdl(compound, blank_values, cfg):
 
 
 def validate_blank_zero_configuration(raw_data, blank_cols, target_compounds, cfg):
-    """Reject processing when any all-zero target lacks manual S/N inputs."""
+    """Reject processing when any target lacks enough MDL calculation evidence."""
     for compound in target_compounds:
         blank_values = [raw_data.get(compound, {}).get(column_letter)
                         for _, column_letter, _ in blank_cols]
-        validate_blank_zero_mdl(compound, blank_values, cfg)
+        evidence = build_blank_mdl_evidence(compound, blank_values, cfg)
+        if not evidence['ready']:
+            raise ValueError(f'{compound}: {evidence["reason"]}')
 
 
 def _preview_mdl(compound, blank_cols, cfg):
-    override = (cfg.get('mdl_overrides') or {}).get(compound) or {}
-    if override.get('blank_zero'):
-        concentration = safe_float(override.get('calibration_concentration'))
-        signal_to_noise = safe_float(override.get('signal_to_noise'))
-        if concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
-            raise ValueError(f'{compound}: calibration concentration and S/N must be positive.')
-        return 3 * concentration / signal_to_noise
-    blanks = _numeric_values(cfg.get('_raw_data', {}), compound, blank_cols)
-    if len(blanks) < 2:
-        return None
-    spike_values = (cfg.get('mdl_spike_values') or {}).get(compound) or []
-    if len(spike_values) >= 2:
-        return calculate_nonzero_blank_mdl(spike_values, blanks)
-    return statistics.mean(blanks) + one_sided_t99(len(blanks)) * statistics.stdev(blanks)
+    blank_values = [cfg.get('_raw_data', {}).get(compound, {}).get(column_letter)
+                    for _, column_letter, _ in blank_cols]
+    evidence = build_blank_mdl_evidence(compound, blank_values, cfg)
+    return evidence['mdl'] if evidence['ready'] else None
 
 
 def _preview_mql(compound, blank_cols, cfg):
@@ -645,9 +705,7 @@ def _preview_mql(compound, blank_cols, cfg):
     blanks = _numeric_values(cfg.get('_raw_data', {}), compound, blank_cols)
     if len(blanks) < 2:
         return None
-    spike_values = [safe_float(value) for value in (cfg.get('mdl_spike_values') or {}).get(compound, []) if safe_float(value) is not None]
-    blank_branch = statistics.mean(blanks) + 10 * statistics.stdev(blanks)
-    return max(10 * statistics.stdev(spike_values), blank_branch) if len(spike_values) >= 2 else blank_branch
+    return statistics.mean(blanks) + 10 * statistics.stdev(blanks)
 
 
 def compute_preview_summary(raw_data, blank_cols, sample_cols, cfg):
@@ -1487,9 +1545,9 @@ def build_info_sheet(wb, S, cfg):
         [text['notes_title']],
         ['Area', 'Formula/rule', 'Source', 'Note'] if english else ['区域', '公式/规则', '来源', '说明'],
         ['Matrix spike recovery', 'measured concentration ÷ corresponding compound/MS spike × 100', 'Imported MS columns', 'Target and SS only; IS does not have recovery.' if english else '目标物和SS才计算；IS不计算回收率。'],
-        ['MDL (blank not zero)', 'MAX(t(0.99,n_spike-1)×SD(spike), mean(blank)+t(0.99,n_blank-1)×SD(blank))', 'Low-level spike replicates + procedural blanks', 't uses actual replicate count.' if english else 't 值根据实际重复数计算。'],
+        ['MDL (blank not zero)', 'mean(blank)+t(0.99,n_blank-1)×SD(blank)', 'Procedural blank replicates', 't uses the actual valid blank count.' if english else 't 值根据有效 blank 实际重复数计算。'],
         ['MDL (blank zero)', '3 × calibration concentration ÷ S/N', 'User-entered calibration point and S/N', 'Blank cells are missing, not zero.' if english else '空单元格为缺失值，不等于0。'],
-        ['MQL', 'MAX(10×SD(spike), mean(blank)+10×SD(blank)); blank zero: 10×calibration concentration÷S/N', 'Same inputs as MDL', 'Reported in final sample units.' if english else '按最终样本单位报告。'],
+        ['MQL', 'mean(blank)+10×SD(blank); blank zero: 10×calibration concentration÷S/N', 'Same blank inputs as MDL', 'Reported in final sample units.' if english else '按最终样本单位报告。'],
         ['Final concentration', 'If vial concentration ≥ vial MDL: (vial concentration - blank mean) × conversion factor; otherwise 1/2 final MDL', 'Vial concentration + blank/MDL sheet', 'Original blank cells remain blank.' if english else '原始空白单元格保持空白。'],
         ['DF', 'True detections ÷ valid samples', 'Hidden detection status', 'True detection = original vial concentration ≥ vial MDL.' if english else '真实检出=原始瓶内浓度≥瓶内MDL。'],
         ['IS additions', 'Recorded per IS and per MS cell only', 'User-entered IS additions', 'IS correction is controlled only by the IS-corrected setting.' if english else '是否IS校正仍只由界面“数据是否经过IS校正”控制。'],

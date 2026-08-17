@@ -9,23 +9,18 @@ import process_lcms_data as processor
 
 
 class FinalWorkflowTests(unittest.TestCase):
-    def test_nonzero_blank_mdl_uses_dynamic_one_sided_99_percent_t_and_maximum(self):
-        # 7 low-level spike replicates use t(0.99, 6) = 3.143.  The blank
-        # branch is intentionally larger and must determine the MDL.
+    def test_nonzero_blank_mdl_uses_dynamic_one_sided_99_percent_t(self):
         mdl = processor.calculate_nonzero_blank_mdl(
             spike_values=[0.9, 1.0, 1.1, 1.0, 1.0, 0.9, 1.1],
             blank_values=[0.20, 0.21, 0.19, 0.20, 0.20, 0.21, 0.19],
         )
-        self.assertAlmostEqual(mdl, 0.2566, places=3)
+        self.assertAlmostEqual(mdl, 0.2256625, places=6)
 
     def test_df_uses_bottle_mdl_not_blank_average(self):
-        raw_data = {'C8-BAC': {'B': 0.20, 'C': 0.20, 'D': 0.20, 'E': 0.25, 'F': 0.60, 'G': None}}
+        raw_data = {'C8-BAC': {'B': 0.19, 'C': 0.20, 'D': 0.21, 'E': 0.25, 'F': 0.60, 'G': None}}
         blanks = [(2, 'B', 'BLANK1'), (3, 'C', 'BLANK2'), (4, 'D', 'BLANK3')]
         samples = [(5, 'E', 'F1'), (6, 'F', 'F2'), (7, 'G', 'F3')]
-        cfg = {
-            'target_compounds': ['C8-BAC'], 'conversion_factor': 1,
-            'mdl_spike_values': {'C8-BAC': [0.9, 1.0, 1.1, 1.0, 1.0, 0.9, 1.1]},
-        }
+        cfg = {'target_compounds': ['C8-BAC'], 'conversion_factor': 1}
         rows = processor.compute_preview_summary(raw_data, blanks, samples, cfg)
         self.assertAlmostEqual(rows[0]['DF (%)'], 50.0)
 
