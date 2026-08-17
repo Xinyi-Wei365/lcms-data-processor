@@ -36,6 +36,22 @@ class XlsxCachedResultsTests(unittest.TestCase):
         self.assertTrue(any('IS measured' in str(ws.cell(r, 1).value or '')
                             for r in range(1, ws.max_row + 1)))
 
+    def test_matrix_spike_average_sd_and_se_have_cached_results(self):
+        output = self.make_output()
+        formula_wb = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        value_wb = openpyxl.load_workbook(io.BytesIO(output), data_only=True)
+        name = next(sheet for sheet in formula_wb.sheetnames if sheet.startswith('Matrix spike'))
+        formula_ws = formula_wb[name]
+        value_ws = value_wb[name]
+        row = next(r for r in range(1, formula_ws.max_row + 1)
+                   if formula_ws.cell(r, 1).value == 'C8-BAC')
+        average_col = next(c for c in range(1, formula_ws.max_column + 1)
+                           if formula_ws.cell(1, c).value == 'average')
+        self.assertTrue(str(formula_ws.cell(row, average_col).value).startswith('='))
+        self.assertEqual(value_ws.cell(row, average_col).value, 100)
+        self.assertEqual(value_ws.cell(row, average_col + 1).value, 0)
+        self.assertEqual(value_ws.cell(row, average_col + 2).value, 0)
+
     def test_formula_cells_keep_formulas_and_have_cached_numeric_results(self):
         output = self.make_output()
         formula_wb = openpyxl.load_workbook(io.BytesIO(output), data_only=False)

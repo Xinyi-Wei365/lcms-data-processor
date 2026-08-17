@@ -1233,18 +1233,33 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
         ws.cell(row=row, column=mid2, value=None)
 
         # 统计公式 (基于回收率%列)
+        recovery_values = []
+        for ms_col in ms_cols:
+            _, column_letter, _ = ms_col
+            measured = safe_float(raw_data.get(comp, {}).get(column_letter))
+            if measured is not None:
+                recovery_values.append(round_int(
+                    measured / resolve_matrix_spike_concentration(comp, ms_col, cfg) * 100
+                ))
         rr = f'{rec_cl}{row}:{rec_cr}{row}'
         c_avg = ws.cell(row=row, column=stat_col)
         c_avg.value = f'=ROUND(AVERAGE({rr}),0)'; c_avg.number_format = '0'
         sty(c_avg, S['data'])
+        cache_formula_value(cfg, ws, c_avg, round_int(statistics.mean(recovery_values)) if recovery_values else None)
 
         c_sd = ws.cell(row=row, column=sd_col)
         c_sd.value = f'=ROUND(STDEV({rr}),0)'; c_sd.number_format = '0'
         sty(c_sd, S['data'])
+        recovery_sd = round_int(statistics.stdev(recovery_values)) if len(recovery_values) >= 2 else None
+        cache_formula_value(cfg, ws, c_sd, recovery_sd)
 
         c_se = ws.cell(row=row, column=se_col)
         c_se.value = f'=ROUND({get_column_letter(sd_col)}{row}/SQRT(COUNT({rr})),0)'; c_se.number_format = '0'
         sty(c_se, S['data'])
+        cache_formula_value(
+            cfg, ws, c_se,
+            round_int(recovery_sd / math.sqrt(len(recovery_values))) if recovery_sd is not None else None,
+        )
 
         row += 1
 
@@ -1282,16 +1297,30 @@ def build_sheet1(wb, raw_data, ms_cols, S, cfg):
             sty(c, S['rec'])
         for c in range(mid2, last_col+1):
             sty(ws.cell(row=row,column=c), S['data'])
+        recovery_values = []
+        for ms_col in ms_cols:
+            _, column_letter, _ = ms_col
+            measured = safe_float(raw_data.get(ss, {}).get(column_letter))
+            if measured is not None:
+                spike = resolve_ss_spike(ss, cfg, ms_col)
+                recovery_values.append(round_int(measured / spike * 100))
         rr = f'{rec_cl}{row}:{rec_cr}{row}'
         c_avg = ws.cell(row=row, column=stat_col)
         c_avg.value = f'=ROUND(AVERAGE({rr}),0)'; c_avg.number_format = '0'
         sty(c_avg, S['data'])
+        cache_formula_value(cfg, ws, c_avg, round_int(statistics.mean(recovery_values)) if recovery_values else None)
         c_sd = ws.cell(row=row, column=sd_col)
         c_sd.value = f'=ROUND(STDEV({rr}),0)'; c_sd.number_format = '0'
         sty(c_sd, S['data'])
+        recovery_sd = round_int(statistics.stdev(recovery_values)) if len(recovery_values) >= 2 else None
+        cache_formula_value(cfg, ws, c_sd, recovery_sd)
         c_se = ws.cell(row=row, column=se_col)
         c_se.value = f'=ROUND({get_column_letter(sd_col)}{row}/SQRT(COUNT({rr})),0)'; c_se.number_format = '0'
         sty(c_se, S['data'])
+        cache_formula_value(
+            cfg, ws, c_se,
+            round_int(recovery_sd / math.sqrt(len(recovery_values))) if recovery_sd is not None else None,
+        )
         row += 1
 
     # IS is deliberately separate from recoveries. Its measured concentrations
