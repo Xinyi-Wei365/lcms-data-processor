@@ -27,7 +27,7 @@ parse_custom_ss_entries = processor.parse_custom_ss_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-blank-mdl-v2'
+APP_VERSION = '2026.08.17-ss-is-examples-v3'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -102,6 +102,17 @@ T = {
                              'en': 'Enter the actual spike amount for every compound in every MS sample. Example: C8-BAC MS1/MS2/MS3 = 10/20/10 ppb. SS uses its own per-cell amount for recovery; IS values are recorded only.'},
     'ms_spike_example':     {'zh': '示例：目标物 C8-BAC 可填 MS1=10、MS2=20、MS3=10；SS d7-C12-BAC 可填 4、4、2；IS C13-C12-BAC 可填 4、4、4（仅记录）。',
                              'en': 'Example: target C8-BAC = 10, 20, 10; SS d7-C12-BAC = 4, 4, 2; IS C13-C12-BAC = 4, 4, 4 (record only).'},
+    'ss_is_example_header': {'zh': 'SS替代物与IS内标逐MS浓度填写示例', 'en': 'SS surrogate and IS internal-standard per-MS examples'},
+    'ss_example_title': {'zh': 'SS替代物理论加入浓度示例', 'en': 'SS theoretical addition example'},
+    'ss_example_help': {
+        'zh': '这些数值是实验时SS自身的理论加入浓度，是SS回收率计算的分母；MS1、MS2、MS3的仪器实测浓度由系统从上传文件自动读取。回收率 = 对应MS实测浓度 ÷ 对应MS理论加入浓度 × 100%。',
+        'en': 'These values are the theoretical SS additions and form the recovery denominator. Measured MS1/MS2/MS3 concentrations are read automatically from the uploaded file. Recovery = measured MS concentration ÷ theoretical addition × 100%.',
+    },
+    'is_example_title': {'zh': 'IS内标加入浓度示例', 'en': 'IS addition example'},
+    'is_example_help': {
+        'zh': '这些数值是实验时每个MS样品加入的IS内标浓度，仅用于输出记录，不计算IS回收率，也不会替代“数据是否经过IS校正”的选择。',
+        'en': 'These values are the IS additions to each MS sample. They are recorded in the output only, do not calculate IS recovery, and do not replace the IS-corrected setting.',
+    },
     'ms_table_compound': {'zh': '化合物名称', 'en': 'Compound name'},
     'ms_table_role': {'zh': '类型/角色', 'en': 'Type / role'},
     'file_header':          {'zh': '📁 文件',                                    'en': '📁 File'},
@@ -354,6 +365,33 @@ if st.session_state.get('demo_active') and file_bytes:
 st.subheader(t('blank_workflow_header', L))
 if not file_bytes:
     st.info(t('blank_workflow_before_upload', L))
+
+st.subheader(t('ss_is_example_header', L))
+example_left, example_right = st.columns(2)
+with example_left:
+    st.markdown(f"**{t('ss_example_title', L)}**")
+    st.caption(t('ss_example_help', L))
+    ss_example_rows = (
+        [{'SS替代物': 'd7-C12-BAC', 'MS1理论加入': 4, 'MS2理论加入': 8, 'MS3理论加入': 12}]
+        if L == 'zh' else
+        [{'SS surrogate': 'd7-C12-BAC', 'MS1 theoretical addition': 4, 'MS2 theoretical addition': 8, 'MS3 theoretical addition': 12}]
+    )
+    st.dataframe(pd.DataFrame(ss_example_rows), width='stretch', hide_index=True)
+with example_right:
+    st.markdown(f"**{t('is_example_title', L)}**")
+    st.caption(t('is_example_help', L))
+    is_example_rows = (
+        [
+            {'IS内标': 'IS-A', 'MS1加入浓度（ppb）': 5, 'MS2加入浓度（ppb）': 5, 'MS3加入浓度（ppb）': 10},
+            {'IS内标': 'IS-B', 'MS1加入浓度（ppb）': 2, 'MS2加入浓度（ppb）': 4, 'MS3加入浓度（ppb）': 4},
+        ]
+        if L == 'zh' else
+        [
+            {'IS internal standard': 'IS-A', 'MS1 addition (ppb)': 5, 'MS2 addition (ppb)': 5, 'MS3 addition (ppb)': 10},
+            {'IS internal standard': 'IS-B', 'MS1 addition (ppb)': 2, 'MS2 addition (ppb)': 4, 'MS3 addition (ppb)': 4},
+        ]
+    )
+    st.dataframe(pd.DataFrame(is_example_rows), width='stretch', hide_index=True)
 
 selected_is = []
 selected_ss = []

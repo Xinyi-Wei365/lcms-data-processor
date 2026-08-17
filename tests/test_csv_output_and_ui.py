@@ -25,6 +25,24 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn("st.info(t('blank_workflow_before_upload', L))", source)
         self.assertIn('APP_VERSION', source)
 
+    def test_main_interface_shows_detailed_ss_and_is_per_ms_examples(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("'ss_is_example_header'", source)
+        self.assertIn('ss_example_rows =', source)
+        self.assertIn('is_example_rows =', source)
+        self.assertIn("'d7-C12-BAC'", source)
+        self.assertIn("'MS1理论加入': 4", source)
+        self.assertIn("'MS2理论加入': 8", source)
+        self.assertIn("'MS3理论加入': 12", source)
+        self.assertIn("'IS-A'", source)
+        self.assertIn("'MS1加入浓度（ppb）': 5", source)
+        self.assertIn("'MS3加入浓度（ppb）': 10", source)
+        self.assertIn("'IS-B'", source)
+        self.assertIn("'MS1加入浓度（ppb）': 2", source)
+        self.assertIn("st.dataframe(pd.DataFrame(ss_example_rows", source)
+        self.assertIn("st.dataframe(pd.DataFrame(is_example_rows", source)
+
     def test_export_csv_contains_summary_columns_and_numeric_preview(self):
         raw = (
             'Name,Ion,BLANK1,BLANK2,MS1,F1,F2\n'
