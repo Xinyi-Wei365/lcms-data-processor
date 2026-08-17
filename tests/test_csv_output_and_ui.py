@@ -28,7 +28,8 @@ class CsvOutputAndUiTests(unittest.TestCase):
     def test_top_output_guide_documents_all_sheets_and_matches_current_formulas(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn("with st.expander(t('output_guide_title', L), expanded=False):", source)
+        self.assertIn("with st.expander(t('output_guide_title', L), expanded=True):", source)
+        self.assertIn("'zh': '📘 输出表及计算方法（可收起）'", source)
         self.assertIn("guide_left, guide_right = st.columns(2)", source)
         for marker in (
             '① 基质加标浓度', '② 空白基质检出限', '③ 瓶内实测浓度',

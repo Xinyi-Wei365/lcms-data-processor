@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-output-guide-v10'
+APP_VERSION = '2026.08.17-output-guide-open-v11'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -81,7 +81,7 @@ def read_preview_table(file_bytes):
 T = {
     'page_title':           {'zh': 'LC-MS/MS 数据处理智能体',                    'en': 'LC-MS/MS Data Processing Agent'},
     'page_subtitle':        {'zh': '上传 MassHunter 原始数据 → 一键生成完整分析表格 → 下载', 'en': 'Upload MassHunter raw data → Auto-generate standard tables → Download'},
-    'output_guide_title':   {'zh': '📘 输出表及计算方法（点击展开）', 'en': '📘 Output sheets and calculations (click to expand)'},
+    'output_guide_title':   {'zh': '📘 输出表及计算方法（可收起）', 'en': '📘 Output sheets and calculations (collapsible)'},
     'output_guide_matrix': {
         'zh': '''**① 基质加标浓度**
 
@@ -342,7 +342,7 @@ st.title(f"🔬 {t('page_title', L)}")
 st.markdown(t('page_subtitle', L))
 st.caption(f'Version: {APP_VERSION}')
 
-with st.expander(t('output_guide_title', L), expanded=False):
+with st.expander(t('output_guide_title', L), expanded=True):
     guide_left, guide_right = st.columns(2)
     with guide_left:
         st.markdown(t('output_guide_matrix', L))
