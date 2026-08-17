@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-output-guide-open-v11'
+APP_VERSION = '2026.08.17-clean-main-v12'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -186,17 +186,6 @@ T = {
                              'en': 'Input columns automatically follow the actual number of MS columns in the uploaded file. Enter the matrix-spike concentration for each target and SS in each corresponding MS; measured MS values are read from the source. SS recovery = measured MS concentration / corresponding MS matrix-spike concentration × 100%. IS has no concentration entry or recovery here.'},
     'ms_spike_example':     {'zh': '示例中的MS1、MS2、MS3仅用于说明；真实输入表会按原始文件的实际MS列数量动态生成，可能少于或多于3列。',
                              'en': 'MS1, MS2 and MS3 are examples only. The real input grid is generated dynamically and may contain fewer or more than three MS columns.'},
-    'ss_is_example_header': {'zh': 'SS基质加标浓度与IS内标名称填写示例', 'en': 'SS matrix-spike concentration and IS name examples'},
-    'ss_example_title': {'zh': 'SS替代物基质加标浓度示例', 'en': 'SS matrix-spike concentration example'},
-    'ss_example_help': {
-        'zh': '这些数值是SS自身在对应MS样品中的基质加标浓度，是SS回收率计算的分母，不是原始表中的MS实测浓度。实测浓度由系统自动读取。示例只展示3个MS；真实输入列数按上传文件动态生成。',
-        'en': 'These are the SS matrix-spike concentrations used as recovery denominators, not the measured MS values in the source file. Measured values are read automatically. Three MS columns are shown only as an example; the real grid follows the uploaded file.',
-    },
-    'is_example_title': {'zh': 'IS内标名称输入示例', 'en': 'IS name input example'},
-    'is_example_help': {
-        'zh': 'IS只输入化合物名称，不输入加入浓度。系统将名称与上传文件中的化合物自动匹配并识别为IS；IS不计算回收率。是否经过IS校正仍由相应选项决定。',
-        'en': 'Enter IS compound names only, without addition concentrations. The app matches them to uploaded compounds and marks them as IS. IS recovery is not calculated; the IS-corrected option remains separate.',
-    },
     'ms_table_compound': {'zh': '化合物名称', 'en': 'Compound name'},
     'ms_table_role': {'zh': '类型/角色', 'en': 'Type / role'},
     'file_header':          {'zh': '📁 文件',                                    'en': '📁 File'},
@@ -466,39 +455,6 @@ if st.session_state.get('demo_active') and file_bytes:
 st.subheader(t('blank_workflow_header', L))
 if not file_bytes:
     st.info(t('blank_workflow_before_upload', L))
-
-st.subheader(t('ss_is_example_header', L))
-example_left, example_right = st.columns(2)
-with example_left:
-    st.markdown(f"**{t('ss_example_title', L)}**")
-    st.caption(t('ss_example_help', L))
-    ss_example_rows = (
-        [
-            {'SS替代物': 'd7-C12-BAC', 'MS1基质加标浓度（ppb）': 4, 'MS2基质加标浓度（ppb）': 8, 'MS3基质加标浓度（ppb）': 12},
-            {'SS替代物': 'd9-C10-ATMAC', 'MS1基质加标浓度（ppb）': 2, 'MS2基质加标浓度（ppb）': 2, 'MS3基质加标浓度（ppb）': 4},
-        ]
-        if L == 'zh' else
-        [
-            {'SS surrogate': 'd7-C12-BAC', 'MS1 matrix spike (ppb)': 4, 'MS2 matrix spike (ppb)': 8, 'MS3 matrix spike (ppb)': 12},
-            {'SS surrogate': 'd9-C10-ATMAC', 'MS1 matrix spike (ppb)': 2, 'MS2 matrix spike (ppb)': 2, 'MS3 matrix spike (ppb)': 4},
-        ]
-    )
-    st.dataframe(pd.DataFrame(ss_example_rows), width='stretch', hide_index=True)
-with example_right:
-    st.markdown(f"**{t('is_example_title', L)}**")
-    st.caption(t('is_example_help', L))
-    is_example_rows = (
-        [
-            {'IS内标化合物名称': 'IS-A'},
-            {'IS内标化合物名称': 'IS-B'},
-        ]
-        if L == 'zh' else
-        [
-            {'IS internal-standard compound name': 'IS-A'},
-            {'IS internal-standard compound name': 'IS-B'},
-        ]
-    )
-    st.dataframe(pd.DataFrame(is_example_rows), width='stretch', hide_index=True)
 
 selected_is = []
 selected_ss = []

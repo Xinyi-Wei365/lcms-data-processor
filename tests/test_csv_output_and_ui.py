@@ -49,23 +49,17 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn('Blank=0：MQL = 10 × 标曲浓度C ÷ S/N × 换算因子', source)
         self.assertNotIn('MQL = 3.333333 × MDL', source)
 
-    def test_main_interface_shows_detailed_ss_and_is_per_ms_examples(self):
+    def test_main_interface_omits_redundant_ss_and_is_example_section(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn("'ss_is_example_header'", source)
-        self.assertIn('ss_example_rows =', source)
-        self.assertIn('is_example_rows =', source)
-        self.assertIn("'d7-C12-BAC'", source)
-        self.assertIn("'MS1基质加标浓度（ppb）': 4", source)
-        self.assertIn("'MS2基质加标浓度（ppb）': 8", source)
-        self.assertIn("'MS3基质加标浓度（ppb）': 12", source)
-        self.assertIn("'d9-C10-ATMAC'", source)
-        self.assertIn("'IS-A'", source)
-        self.assertIn("'IS-B'", source)
-        self.assertIn("'IS内标化合物名称': 'IS-A'", source)
-        self.assertNotIn("'MS1加入浓度（ppb）':", source)
-        self.assertIn("st.dataframe(pd.DataFrame(ss_example_rows", source)
-        self.assertIn("st.dataframe(pd.DataFrame(is_example_rows", source)
+        self.assertNotIn("'ss_is_example_header'", source)
+        self.assertNotIn('ss_example_rows =', source)
+        self.assertNotIn('is_example_rows =', source)
+        self.assertNotIn("st.dataframe(pd.DataFrame(ss_example_rows", source)
+        self.assertNotIn("st.dataframe(pd.DataFrame(is_example_rows", source)
+        # Concise examples remain in the real sidebar inputs.
+        self.assertIn('d7-C12-BAC，4，8，12', source)
+        self.assertIn('IS-A；IS-B', source)
 
     def test_export_csv_contains_summary_columns_and_numeric_preview(self):
         raw = (
@@ -155,9 +149,8 @@ class CsvOutputAndUiTests(unittest.TestCase):
             source = handle.read()
         for marker in ('英文逗号“,”', '中文逗号“，”', '英文分号“;”', '中文分号“；”', 'Tab', '换行'):
             self.assertIn(marker, source)
-        self.assertIn('MS1基质加标浓度（ppb）', source)
-        self.assertIn('MS2基质加标浓度（ppb）', source)
-        self.assertIn('MS3基质加标浓度（ppb）', source)
+        self.assertIn("f'MS{index}基质加标浓度（ppb）'", source)
+        self.assertNotIn("'MS1基质加标浓度（ppb）': 4", source)
         self.assertIn('实际MS列数量', source)
         self.assertIn("for index, (_, _, header) in enumerate(mss, 1)", source)
 
