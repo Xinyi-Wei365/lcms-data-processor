@@ -506,6 +506,7 @@ def parse_ss_matrix_spike_entries(text, ms_headers):
         line = raw_line.strip()
         if not line:
             continue
+        line = re.sub(r'[,，;；\t]+\s*$', '', line)
         parts = [part.strip() for part in re.split(r'[,，;；\t]+', line)]
         if not parts[0]:
             errors.append(f'第{line_number}行：缺少替代物名称。')
