@@ -24,4 +24,6 @@ The SS and IS custom-name input areas must show the exact accepted name syntax, 
 
 The interface must include copyable SS and IS name examples. After upload, the left sidebar dynamically creates one real concentration input for every SS-by-MS pair; the read-only main-page example is never an input control. The main-page compound-by-MS editor remains the source of target-analyte spike concentrations only. Every sidebar SS input is required and must start empty; the app must not assume a default such as 4 ppb. Processing remains disabled until all SS inputs contain positive values. The SS recovery calculation pairs each measured MS value from the source with the corresponding sidebar SS matrix-spike concentration.
 
+Directly below the SS name box, the sidebar must show a two-step worked example: enter `d7-C12-BAC，d9-C10-ATMAC`, then after upload enter d7 values `4/8/12 ppb` for MS1/MS2/MS3 and d9 values `2/2/4 ppb`. It must explicitly state that these numbers are instructional only, are never copied into real calculations, and that the actual number of inputs follows the uploaded MS columns.
+
 The parser and its validation messages must accept all five delimiters so the displayed guidance matches actual behavior. Invalid lines must identify the line number and restate the accepted input pattern.

@@ -29,7 +29,7 @@ missing_matrix_spike_entries = processor.missing_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-sidebar-ss-spikes-v6'
+APP_VERSION = '2026.08.17-ss-input-example-v7'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -214,6 +214,11 @@ T = {
     'ss_spike_required': {'zh': 'SS基质加标浓度必须填写完整，不能使用系统猜测值。请填写：', 'en': 'Every SS matrix-spike concentration is required; the app will not guess values. Enter: '},
     'ss_spike_sidebar_header': {'zh': 'SS替代物基质加标浓度（必填）', 'en': 'SS matrix-spike concentrations (required)'},
     'ss_spike_sidebar_help': {'zh': '以下是实际计算输入，不是示例。系统根据上传文件识别到的MS列自动生成；请填写每个SS在每个MS中的自身基质加标浓度。', 'en': 'These are real calculation inputs, not examples. They follow the MS columns detected in the uploaded file; enter each SS compound’s own matrix-spike concentration for every MS.'},
+    'ss_input_example_title': {'zh': 'SS名称和自身基质加标浓度填写示例', 'en': 'Example: SS names and their matrix-spike concentrations'},
+    'ss_input_example_body': {
+        'zh': '第一步：在上方名称框输入：\n`d7-C12-BAC，d9-C10-ATMAC`\n\n第二步：上传文件后，在左侧自动出现的输入框填写：\n- `d7-C12-BAC / MS1 = 4 ppb`\n- `d7-C12-BAC / MS2 = 8 ppb`\n- `d7-C12-BAC / MS3 = 12 ppb`\n- `d9-C10-ATMAC / MS1 = 2 ppb`\n- `d9-C10-ATMAC / MS2 = 2 ppb`\n- `d9-C10-ATMAC / MS3 = 4 ppb`\n\n示例数字仅用于说明填写方法，不会自动写入真实计算。实际有几个MS，左侧就生成几个浓度输入框。',
+        'en': 'Step 1: enter the names above:\n`d7-C12-BAC, d9-C10-ATMAC`\n\nStep 2: after upload, fill the sidebar inputs:\n- `d7-C12-BAC / MS1 = 4 ppb`\n- `d7-C12-BAC / MS2 = 8 ppb`\n- `d7-C12-BAC / MS3 = 12 ppb`\n- `d9-C10-ATMAC / MS1 = 2 ppb`\n- `d9-C10-ATMAC / MS2 = 2 ppb`\n- `d9-C10-ATMAC / MS3 = 4 ppb`\n\nThese numbers only explain the input method and are never inserted into real calculations. The sidebar creates one input for every actual MS column.',
+    },
     'role_overlap': {'zh': '同一化合物不能同时作为 IS 与 SS：', 'en': 'An analyte cannot be both IS and SS: '},
 }
 
@@ -320,6 +325,8 @@ with st.sidebar:
         key='custom_ss_text',
         label_visibility='collapsed',
     )
+    st.markdown(f"**{t('ss_input_example_title', L)}**")
+    st.info(t('ss_input_example_body', L))
 
     st.subheader(t('custom_is', L))
     st.caption(t('custom_is_help', L))

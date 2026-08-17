@@ -39,5 +39,6 @@
 - [ ] Add failing validation tests proving that every SS-by-MS concentration is required, zero/blank values are rejected, and no 4 ppb default is injected.
 - [ ] Start SS editor cells empty, list every missing SS/MS pair, and disable processing until all required SS concentrations are positive.
 - [ ] Render the required SS-by-MS concentration controls in the left sidebar after file detection, merge those values into the processing configuration, and remove SS rows from the main-page target concentration editor.
+- [ ] Add a fixed two-step worked example under the SS name box, including d7 `4/8/12`, d9 `2/2/4`, and a warning that example values never populate real inputs.
 - [ ] Run both focused tests and confirm they pass.
 - [ ] Run `python -m unittest discover -s tests -v` and `git diff --check` before committing.

@@ -162,6 +162,21 @@ class CsvOutputAndUiTests(unittest.TestCase):
         table_region = source[source.index('ms_rows = []'):source.index('ms_table = st.data_editor')]
         self.assertNotIn("roles_for_ms['ss_compounds']", table_region)
 
+    def test_sidebar_shows_complete_ss_name_and_concentration_example(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("'ss_input_example_title'", source)
+        self.assertIn('第一步：在上方名称框输入', source)
+        self.assertIn('第二步：上传文件后，在左侧自动出现的输入框填写', source)
+        self.assertIn('d7-C12-BAC / MS1 = 4 ppb', source)
+        self.assertIn('d7-C12-BAC / MS2 = 8 ppb', source)
+        self.assertIn('d7-C12-BAC / MS3 = 12 ppb', source)
+        self.assertIn('d9-C10-ATMAC / MS1 = 2 ppb', source)
+        self.assertIn('d9-C10-ATMAC / MS2 = 2 ppb', source)
+        self.assertIn('d9-C10-ATMAC / MS3 = 4 ppb', source)
+        self.assertIn('示例数字仅用于说明填写方法，不会自动写入真实计算', source)
+        self.assertIn("st.info(t('ss_input_example_body', L))", source)
+
     def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
