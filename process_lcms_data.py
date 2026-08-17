@@ -121,6 +121,11 @@ def safe_float(v):
     except: return None
 
 
+def is_empty_cell(value):
+    """Return True only for genuinely empty source cells, not ND or other text."""
+    return value is None or (isinstance(value, str) and not value.strip())
+
+
 def normalize_analyte_name(name):
     """Normalize the requested DDAC display spelling to DADMAC."""
     original = str(name or '').strip()
@@ -578,16 +583,12 @@ def build_blank_mdl_evidence(compound, blank_values, cfg):
         'reason': None,
     }
 
-    if valid_count == 0:
-        evidence.update(status='missing', reason='No valid blank results were found.')
-        return evidence
-
-    all_cells_numeric_zero = (
+    all_cells_zero_or_empty = (
         bool(raw_values)
-        and valid_count == len(raw_values)
+        and all(is_empty_cell(value) or safe_float(value) == 0 for value in raw_values)
         and nonzero_count == 0
     )
-    if all_cells_numeric_zero:
+    if all_cells_zero_or_empty:
         evidence['status'] = 'blank_zero'
         override = (cfg.get('mdl_overrides') or {}).get(compound) or {}
         concentration = safe_float(override.get('calibration_concentration'))
@@ -595,11 +596,16 @@ def build_blank_mdl_evidence(compound, blank_values, cfg):
         evidence['calibration_concentration'] = concentration
         evidence['signal_to_noise'] = signal_to_noise
         if concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
-            evidence['reason'] = 'blank=0 requires a positive calibration concentration and S/N.'
+            evidence['reason'] = 'Zero-or-empty blanks require a positive calibration concentration and S/N.'
             return evidence
         evidence['ready'] = True
         evidence['formula'] = f'3 × {_compact_number(concentration)} ÷ {_compact_number(signal_to_noise)}'
         evidence['mdl'] = 3 * concentration / signal_to_noise
+        return evidence
+
+
+    if valid_count == 0:
+        evidence.update(status='missing', reason='No valid blank results were found.')
         return evidence
 
     if valid_count < 2:
@@ -612,7 +618,7 @@ def build_blank_mdl_evidence(compound, blank_values, cfg):
     if nonzero_count == 0:
         evidence.update(
             status='incomplete',
-            reason='Blank cells are missing; blank=0 requires every blank cell to be numeric zero.',
+            reason='Blank entries contain unsupported text; use genuinely empty cells or numeric zero for the S/N path.',
         )
         return evidence
 
@@ -716,26 +722,26 @@ def _numeric_values(raw_data, compound, columns):
 
 
 def detect_blank_zero_compounds(raw_data, blank_cols):
-    """Detect analytes whose complete blank series is numeric zero."""
+    """Detect analytes whose blank series contains only numeric zero or empty cells."""
     detected = []
     for compound in raw_data:
-        values = [safe_float(raw_data.get(compound, {}).get(column_letter))
+        values = [raw_data.get(compound, {}).get(column_letter)
                   for _, column_letter, _ in blank_cols]
-        if values and all(value is not None and value == 0 for value in values):
+        if values and all(is_empty_cell(value) or safe_float(value) == 0 for value in values):
             detected.append(compound)
     return detected
 
 
 def validate_blank_zero_mdl(compound, blank_values, cfg):
-    """Validate that a blank-zero analyte has the required manual S/N rule."""
-    values = [safe_float(value) for value in blank_values]
-    if not values or not all(value is not None and value == 0 for value in values):
+    """Validate that a zero-or-empty blank analyte has the required manual S/N rule."""
+    values = list(blank_values or [])
+    if not values or not all(is_empty_cell(value) or safe_float(value) == 0 for value in values):
         return None
     override = (cfg.get('mdl_overrides') or {}).get(compound) or {}
     concentration = safe_float(override.get('calibration_concentration'))
     signal_to_noise = safe_float(override.get('signal_to_noise'))
     if not override.get('blank_zero') or concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
-        raise ValueError(f'{compound}: blank=0 requires positive calibration concentration and S/N.')
+        raise ValueError(f'{compound}: zero-or-empty blanks require positive calibration concentration and S/N.')
     return None
 
 

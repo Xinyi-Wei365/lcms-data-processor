@@ -313,14 +313,41 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual(is_compounds, [])
         self.assertEqual(ss_compounds, ['d7-C12-BAC'])
 
-    def test_blank_zero_detection_requires_all_blank_cells_to_be_numeric_zero(self):
+    def test_snr_path_detection_accepts_only_zero_or_empty_blank_cells(self):
         raw_data = {
             'Zero': {'B': 0, 'C': 0.0, 'D': '0'},
             'Mixed': {'B': 0, 'C': 0.1, 'D': 0},
             'Missing': {'B': 0, 'C': None, 'D': 0},
+            'All empty': {'B': None, 'C': '', 'D': None},
+            'Text ND': {'B': 0, 'C': 'ND', 'D': 0},
         }
         blanks = [(2, 'B', 'blank_1'), (3, 'C', 'blank_2'), (4, 'D', 'blank_3')]
-        self.assertEqual(processor.detect_blank_zero_compounds(raw_data, blanks), ['Zero'])
+        self.assertEqual(
+            processor.detect_blank_zero_compounds(raw_data, blanks),
+            ['Zero', 'Missing', 'All empty'],
+        )
+
+    def test_zero_or_empty_blank_series_uses_manual_snr_mdl_and_mql(self):
+        cfg = {'mdl_overrides': {'Analyte': {
+            'blank_zero': True,
+            'calibration_concentration': 1,
+            'signal_to_noise': 10,
+        }}}
+        evidence = processor.build_blank_mdl_evidence('Analyte', [None, 0, ''], cfg)
+        self.assertEqual(evidence['status'], 'blank_zero')
+        self.assertTrue(evidence['ready'])
+        self.assertAlmostEqual(evidence['mdl'], 0.3)
+        self.assertEqual(processor.mql_formula('Analyte', 'B2:D2', cfg), '=10*1.0/10.0')
+
+    def test_nonzero_blank_values_remain_automatic_when_other_cells_are_empty(self):
+        evidence = processor.build_blank_mdl_evidence('Analyte', [None, 0.1, 0.2, ''], {})
+        self.assertEqual(evidence['status'], 'blank_nonzero')
+        self.assertTrue(evidence['ready'])
+
+    def test_text_nd_is_not_silently_treated_as_empty_or_zero(self):
+        evidence = processor.build_blank_mdl_evidence('Analyte', [0, 'ND', 0], {})
+        self.assertEqual(evidence['status'], 'incomplete')
+        self.assertFalse(evidence['ready'])
 
     def test_blank_zero_mdl_requires_manual_snr_override(self):
         with self.assertRaises(ValueError):

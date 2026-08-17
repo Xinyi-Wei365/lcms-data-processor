@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-specific-mdl-blockers-v17'
+APP_VERSION = '2026.08.17-empty-blank-snr-v18'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -101,13 +101,13 @@ T = {
 
 - 包含Blank原始值、Blank平均值、瓶内MDL和1/2样本MDL；空单元格不作为0参与计算。
 - Blank≠0：Blank平均值 = 有效Blank值的算术平均值；Blank标准差 = 有效Blank值的样本标准差；瓶内MDL = Blank平均值 + t(0.99，n−1) × Blank标准差。n为有效Blank数量，系统按自由度n−1自动选取单侧99% t值。
-- Blank全部为数值0：瓶内MDL = 3 × 标曲浓度C ÷ S/N，C和S/N由用户逐化合物填写。
+- Blank没有任何非零值，且仅由空单元格和数值0组成：瓶内MDL = 3 × 标曲浓度C ÷ S/N，C和S/N由用户逐化合物填写。
 - 1/2样本MDL = 瓶内MDL ÷ 2 × 换算因子。''',
         'en': '''**2. Blank MDL**
 
 - Contains raw blank values, blank mean, vial MDL and half sample-unit MDL. Empty cells are not treated as zero.
 - Non-zero blank path: vial MDL = blank mean + t(0.99, n−1) × sample SD of valid blanks. The one-sided 99% t value follows the actual valid blank count n.
-- All-numeric-zero blank path: vial MDL = 3 × calibration concentration C / S/N; C and S/N are entered per compound.
+- Zero-or-empty blank path with no non-zero result: vial MDL = 3 × calibration concentration C / S/N; C and S/N are entered per compound.
 - Half sample MDL = vial MDL / 2 × conversion factor.''',
     },
     'output_guide_bottle': {
@@ -221,8 +221,8 @@ T = {
     'blank_zero_header':    {'zh': 'Blank/MDL 逐化合物设置',                      'en': 'Per-compound Blank/MDL settings'},
     'blank_workflow_header': {'zh': 'Blank/MDL 设置与计算', 'en': 'Blank/MDL settings and calculation'},
     'blank_workflow_before_upload': {
-        'zh': '请先上传文件或加载 Demo。上传后，系统会自动识别每个化合物的 blank 列：blank 全为数值0时显示标曲浓度和 S/N 输入；blank 含非零值时自动计算均值、SD、动态 t 值和 MDL，并在“计算依据”中展示。',
-        'en': 'Upload a file or load the Demo first. The app then evaluates blank columns for every compound: all-numeric-zero blanks require calibration concentration and S/N; non-zero blanks automatically show mean, SD, dynamic t and MDL in Calculation evidence.',
+        'zh': '请先上传文件或加载 Demo。上传后，系统逐化合物检查 blank：没有任何非零值且仅为空单元格或数值0时，会在下方自动显示标曲浓度C和S/N输入框；存在非零值时自动计算均值、SD、动态t值和MDL。',
+        'en': 'Upload a file or load the Demo first. For each compound, blank cells containing only zero or empty values and no non-zero result trigger calibration concentration C and S/N inputs below; non-zero blanks use mean, SD, dynamic t and MDL automatically.',
     },
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
@@ -236,7 +236,7 @@ T = {
                              'en': 'Enter IS compound names only, without concentrations. Separate names with an English comma, Chinese comma, English semicolon, Chinese semicolon, Tab, or a new line. The app matches them to uploaded compounds and marks them as IS. IS recovery is not calculated; the IS-corrected option remains separate.'},
     'custom_is_placeholder': {'zh': 'IS-A；IS-B\nC13-Internal Standard',
                               'en': 'IS-A; IS-B\nC13-Internal Standard'},
-    'blank_zero_help':      {'zh': '系统逐化合物判断：全部 blank 为数值0时填写标曲浓度和 S/N；blank 含非零值时自动使用均值、动态 t 值和 SD。', 'en': 'Each compound is evaluated independently: enter calibration concentration and S/N when every blank is numeric zero; non-zero blanks use mean, dynamic t and SD automatically.'},
+    'blank_zero_help':      {'zh': '输入位置就在这里：若某化合物的Blank没有任何非零值，且仅为空单元格或数值0，系统会在本区域自动生成该化合物的“标曲浓度C”和“S/N”输入框；存在非零Blank时自动计算。', 'en': 'Input location: when a compound has no non-zero blank and its blank cells contain only zero or empty values, this section automatically shows calibration concentration C and S/N inputs for that compound; non-zero blanks are calculated automatically.'},
     'calibration':          {'zh': '标曲浓度 (ppb)',                              'en': 'Calibration concentration (ppb)'},
     'sn':                   {'zh': 'S/N',                                         'en': 'S/N'},
     'mql_help':             {'zh': '默认 3.333333；请按实验室方法确认。',              'en': 'Default 3.333333; confirm with your laboratory method.'},
@@ -248,7 +248,7 @@ T = {
     'evidence_status': {'zh': '系统判断', 'en': 'System decision'},
     'evidence_action': {'zh': '处理/操作', 'en': 'Treatment / action'},
     'evidence_mdl': {'zh': '瓶内MDL预览 (ppb)', 'en': 'Vial MDL preview (ppb)'},
-    'evidence_blank_zero': {'zh': 'blank=0', 'en': 'blank=0'},
+    'evidence_blank_zero': {'zh': 'Blank为0/空值路径', 'en': 'Zero/empty blank path'},
     'evidence_blank_nonzero': {'zh': 'blank≠0', 'en': 'blank≠0'},
     'evidence_missing': {'zh': '无有效blank', 'en': 'No valid blanks'},
     'evidence_insufficient': {'zh': '有效blank不足', 'en': 'Insufficient blanks'},
@@ -261,10 +261,10 @@ T = {
     'evidence_t': {'zh': '单侧99% t值', 'en': 'One-sided 99% t'},
     'evidence_mean': {'zh': 'blank平均值', 'en': 'Blank mean'},
     'evidence_sd': {'zh': 'blank标准差', 'en': 'Blank SD'},
-    'evidence_reason_blank_zero': {'zh': 'blank=0时必须填写大于0的标曲浓度和S/N。', 'en': 'blank=0 requires a positive calibration concentration and S/N.'},
+    'evidence_reason_blank_zero': {'zh': 'Blank没有非零值且仅为0或空值时，必须填写大于0的标曲浓度C和S/N。', 'en': 'When blanks have no non-zero result and contain only zero or empty cells, positive calibration concentration C and S/N are required.'},
     'evidence_reason_missing': {'zh': '没有找到有效的blank测定结果。', 'en': 'No valid blank results were found.'},
     'evidence_reason_insufficient': {'zh': '至少需要2个有效blank结果才能计算标准差。', 'en': 'At least two valid blank results are required to calculate a standard deviation.'},
-    'evidence_reason_incomplete': {'zh': 'blank中存在缺失单元格；只有每个blank均为数值0时才属于blank=0。', 'en': 'Blank cells are missing; blank=0 requires every blank cell to be numeric zero.'},
+    'evidence_reason_incomplete': {'zh': 'Blank中含有ND、横杠或其他文字；只有真正的空单元格和数值0才进入C/S/N路径。', 'en': 'Blank entries contain ND, dashes, or other text. Only genuinely empty cells and numeric zero enter the C/S/N path.'},
     'preview_stats':        {'zh': '描述性统计（在线数值预览）',                     'en': 'Descriptive statistics (numeric preview)'},
     'preview_stats_help':   {'zh': '这里显示已计算的数值；下载的 Excel 同时保留可审计公式。', 'en': 'Calculated values are shown here; downloaded Excel retains auditable formulas.'},
     'preview_final':        {'zh': '最终浓度（在线数值预览）',                       'en': 'Final concentrations (numeric preview)'},
@@ -288,7 +288,7 @@ T = {
     'process_blocked_header': {'zh': '“开始处理”尚未启用，请先完成以下项目：', 'en': 'Start Processing is not enabled. Complete the following items:'},
     'process_blocked_file': {'zh': '上传原始文件或加载 Demo 数据。', 'en': 'Upload a source file or load the Demo.'},
     'process_blocked_layout': {'zh': '修正文件格式检查中显示的错误，确保能识别 BLANK、MS、样品列和目标物。', 'en': 'Resolve the input-format errors so BLANK, MS, sample columns, and targets can be identified.'},
-    'process_blocked_mdl_zero': {'zh': 'Blank全部为0，请在上方填写标曲浓度C和S/N。', 'en': 'All blanks are zero; enter calibration concentration C and S/N above.'},
+    'process_blocked_mdl_zero': {'zh': 'Blank没有非零值且仅为0或空值，请在上方“Blank/MDL逐化合物设置”中填写标曲浓度C和S/N。', 'en': 'Blanks contain only zero or empty cells with no non-zero result. Enter calibration concentration C and S/N in the per-compound Blank/MDL section above.'},
     'process_blocked_mdl_missing': {'zh': '没有有效Blank结果，无法计算MDL。', 'en': 'No valid blank results were found, so MDL cannot be calculated.'},
     'process_blocked_mdl_insufficient': {'zh': '有效Blank少于2个，无法计算标准差和MDL。', 'en': 'Fewer than two valid blanks are available, so SD and MDL cannot be calculated.'},
     'process_blocked_mdl_incomplete': {'zh': 'Blank列存在缺失，且现有有效值全部为0；请补齐Blank数据后重新上传。', 'en': 'Blank cells are missing and all remaining valid values are zero; complete the blank data and upload again.'},
