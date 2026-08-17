@@ -112,8 +112,8 @@ class CsvOutputAndUiTests(unittest.TestCase):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn("'custom_ss'", source)
-        self.assertIn('d7-C12-BAC，d9-C10-ATMAC', source)
-        self.assertIn('parse_compound_name_entries(custom_ss_text)', source)
+        self.assertIn('d7-C12-BAC，4，8，12', source)
+        self.assertIn('parse_ss_matrix_spike_entries(', source)
         self.assertIn('missing_custom_ss', source)
         self.assertIn('SS基质加标浓度必须填写', source)
         self.assertNotIn('这里只输入SS化合物名称，不输入浓度', source)
@@ -146,19 +146,18 @@ class CsvOutputAndUiTests(unittest.TestCase):
     def test_ss_matrix_spike_cells_have_no_silent_four_ppb_default_and_are_required(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn("key=f'ss_matrix_spike_{ss_index}_{ms_index}'", source)
-        self.assertIn('value=None', source)
+        self.assertIn("key='custom_ss_text'", source)
         self.assertIn('missing_matrix_spike_entries(', source)
         self.assertIn('not ss_spike_ready', source)
         self.assertNotIn('ss_concentrations = {name: 4.0', source)
 
-    def test_dynamic_ss_matrix_spike_inputs_are_rendered_in_sidebar(self):
+    def test_ss_matrix_spike_values_are_entered_in_one_sidebar_text_box(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn("with st.sidebar:\n                st.subheader(t('ss_spike_sidebar_header', L))", source)
-        self.assertIn("for ss_index, ss_name in enumerate(roles_for_ms['ss_compounds'])", source)
-        self.assertIn("for ms_index, (_, _, header) in enumerate(mss, 1)", source)
-        self.assertIn("f'{ss_name} / MS{ms_index} 基质加标浓度（ppb）'", source)
+        self.assertIn('每行格式：替代物名称，MS1浓度，MS2浓度……', source)
+        self.assertIn('d7-C12-BAC，4，8，12', source)
+        self.assertIn('d9-C10-ATMAC；2；2；4', source)
+        self.assertNotIn("key=f'ss_matrix_spike_{ss_index}_{ms_index}'", source)
         table_region = source[source.index('ms_rows = []'):source.index('ms_table = st.data_editor')]
         self.assertNotIn("roles_for_ms['ss_compounds']", table_region)
 
@@ -166,14 +165,12 @@ class CsvOutputAndUiTests(unittest.TestCase):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn("'ss_input_example_title'", source)
-        self.assertIn('第一步：在上方名称框输入', source)
-        self.assertIn('第二步：上传文件后，在左侧自动出现的输入框填写', source)
-        self.assertIn('d7-C12-BAC / MS1 = 4 ppb', source)
-        self.assertIn('d7-C12-BAC / MS2 = 8 ppb', source)
-        self.assertIn('d7-C12-BAC / MS3 = 12 ppb', source)
-        self.assertIn('d9-C10-ATMAC / MS1 = 2 ppb', source)
-        self.assertIn('d9-C10-ATMAC / MS2 = 2 ppb', source)
-        self.assertIn('d9-C10-ATMAC / MS3 = 4 ppb', source)
+        self.assertIn('名称必须与未处理表中的化合物名称完全一致', source)
+        self.assertIn('浓度依次对应MS1、MS2、MS3……', source)
+        self.assertIn('替代物自身的基质加标浓度', source)
+        self.assertIn('一定不是未处理原始数据表中仪器检测出来的浓度', source)
+        self.assertIn('禁止复制原始表中的MS实测值', source)
+        self.assertIn('SS回收率 = 原始表中的SS实测浓度 ÷ 用户填写的SS自身基质加标浓度 × 100%', source)
         self.assertIn('示例数字仅用于说明填写方法，不会自动写入真实计算', source)
         self.assertIn("st.info(t('ss_input_example_body', L))", source)
 

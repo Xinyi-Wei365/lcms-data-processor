@@ -142,6 +142,29 @@ class DynamicRulesTests(unittest.TestCase):
         )
         self.assertEqual(missing, [])
 
+    def test_ss_matrix_spike_text_parses_name_and_all_ms_values(self):
+        entries, errors = processor.parse_ss_matrix_spike_entries(
+            'd7-C12-BAC，4，8，12\n'
+            'd9-C10-ATMAC;2;2;4\n'
+            'SS-X\t1\t3\t5',
+            ['MS1', 'MS2', 'MS3'],
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(entries['d7-C12-BAC'], {'MS1': 4.0, 'MS2': 8.0, 'MS3': 12.0})
+        self.assertEqual(entries['d9-C10-ATMAC'], {'MS1': 2.0, 'MS2': 2.0, 'MS3': 4.0})
+        self.assertEqual(entries['SS-X'], {'MS1': 1.0, 'MS2': 3.0, 'MS3': 5.0})
+
+    def test_ss_matrix_spike_text_rejects_wrong_count_and_nonpositive_values(self):
+        entries, errors = processor.parse_ss_matrix_spike_entries(
+            'SS-A,4,8\nSS-B；2；0；4', ['MS1', 'MS2', 'MS3']
+        )
+        self.assertEqual(entries, {})
+        self.assertEqual(len(errors), 2)
+        self.assertIn('第1行', errors[0])
+        self.assertIn('需要3个浓度', errors[0])
+        self.assertIn('第2行', errors[1])
+        self.assertIn('必须为大于0的数字', errors[1])
+
     def test_custom_ss_is_moved_to_recovery_section_and_uses_its_own_spike(self):
         raw = (
             'Name,Ion,BLANK1,BLANK2,MS1,MS2,F1\n'

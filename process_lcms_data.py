@@ -497,6 +497,37 @@ def missing_matrix_spike_entries(compounds, ms_headers, concentrations):
     return missing
 
 
+def parse_ss_matrix_spike_entries(text, ms_headers):
+    """Parse one SS per line: name followed by one concentration per MS."""
+    entries = {}
+    errors = []
+    headers = list(ms_headers or [])
+    for line_number, raw_line in enumerate(str(text or '').splitlines(), 1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = [part.strip() for part in re.split(r'[,，;；\t]+', line)]
+        if not parts[0]:
+            errors.append(f'第{line_number}行：缺少替代物名称。')
+            continue
+        name = normalize_analyte_name(parts[0])
+        raw_values = parts[1:]
+        if len(raw_values) != len(headers):
+            errors.append(
+                f'第{line_number}行（{name}）：检测到{len(headers)}个MS，需要{len(headers)}个浓度，实际填写{len(raw_values)}个。'
+            )
+            continue
+        values = [safe_float(value) for value in raw_values]
+        if any(value is None or not math.isfinite(value) or value <= 0 for value in values):
+            errors.append(f'第{line_number}行（{name}）：每个基质加标浓度必须为大于0的数字。')
+            continue
+        if name in entries:
+            errors.append(f'第{line_number}行：替代物名称“{name}”重复。')
+            continue
+        entries[name] = dict(zip(headers, values))
+    return entries, errors
+
+
 def one_sided_t99(sample_count):
     """Return t(0.99, n-1) for the available number of replicates."""
     n = int(sample_count or 0)
