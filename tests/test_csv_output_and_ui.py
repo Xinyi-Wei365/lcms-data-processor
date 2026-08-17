@@ -15,6 +15,16 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn('processor = importlib.reload(processor)', source)
         self.assertIn('build_blank_mdl_evidence = processor.build_blank_mdl_evidence', source)
 
+    def test_blank_mdl_workflow_is_visible_before_upload(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("'blank_workflow_header'", source)
+        self.assertIn("'zh': 'Blank/MDL 设置与计算'", source)
+        self.assertIn("'blank_workflow_before_upload'", source)
+        self.assertIn("st.subheader(t('blank_workflow_header', L))", source)
+        self.assertIn("st.info(t('blank_workflow_before_upload', L))", source)
+        self.assertIn('APP_VERSION', source)
+
     def test_export_csv_contains_summary_columns_and_numeric_preview(self):
         raw = (
             'Name,Ion,BLANK1,BLANK2,MS1,F1,F2\n'

@@ -27,6 +27,8 @@ parse_custom_ss_entries = processor.parse_custom_ss_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
+APP_VERSION = '2026.08.17-blank-mdl-v2'
+
 try:
     validate_input_layout = processor.validate_input_layout
 except AttributeError:
@@ -119,6 +121,11 @@ T = {
     'classification_role': {'zh': '角色', 'en': 'Role'},
     'role_options': {'zh': ['目标物', '替代物 (SS)', '内标 (IS)'], 'en': ['Target', 'Surrogate (SS)', 'Internal standard (IS)']},
     'blank_zero_header':    {'zh': 'Blank/MDL 逐化合物设置',                      'en': 'Per-compound Blank/MDL settings'},
+    'blank_workflow_header': {'zh': 'Blank/MDL 设置与计算', 'en': 'Blank/MDL settings and calculation'},
+    'blank_workflow_before_upload': {
+        'zh': '请先上传文件或加载 Demo。上传后，系统会自动识别每个化合物的 blank 列：blank 全为数值0时显示标曲浓度和 S/N 输入；blank 含非零值时自动计算均值、SD、动态 t 值和 MDL，并在“计算依据”中展示。',
+        'en': 'Upload a file or load the Demo first. The app then evaluates blank columns for every compound: all-numeric-zero blanks require calibration concentration and S/N; non-zero blanks automatically show mean, SD, dynamic t and MDL in Calculation evidence.',
+    },
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
     'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
@@ -235,6 +242,7 @@ with st.sidebar:
 
 st.title(f"🔬 {t('page_title', L)}")
 st.markdown(t('page_subtitle', L))
+st.caption(f'Version: {APP_VERSION}')
 
 # ============================================================
 # 侧边栏
@@ -342,6 +350,10 @@ if uploaded_file:
 
 if st.session_state.get('demo_active') and file_bytes:
     st.info(t('demo_loaded', L))
+
+st.subheader(t('blank_workflow_header', L))
+if not file_bytes:
+    st.info(t('blank_workflow_before_upload', L))
 
 selected_is = []
 selected_ss = []
@@ -475,7 +487,7 @@ if file_bytes:
             st.dataframe(pd.DataFrame(classification_rows), width='stretch', hide_index=True)
 
         target_compounds = resolve_roles(all_c, selected_is, selected_ss)['target_compounds']
-        st.subheader(t('blank_zero_header', L))
+        st.markdown(f"### {t('blank_zero_header', L)}")
         st.caption(t('blank_zero_help', L))
 
         blank_values_by_compound = {
