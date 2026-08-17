@@ -7,6 +7,14 @@ import process_lcms_data as processor
 
 
 class CsvOutputAndUiTests(unittest.TestCase):
+    def test_streamlit_reloads_processor_module_before_binding_new_helpers(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn('import importlib', source)
+        self.assertIn('import process_lcms_data as processor', source)
+        self.assertIn('processor = importlib.reload(processor)', source)
+        self.assertIn('build_blank_mdl_evidence = processor.build_blank_mdl_evidence', source)
+
     def test_export_csv_contains_summary_columns_and_numeric_preview(self):
         raw = (
             'Name,Ion,BLANK1,BLANK2,MS1,F1,F2\n'

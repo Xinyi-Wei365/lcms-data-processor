@@ -9,15 +9,27 @@ import pandas as pd
 import tempfile
 import os
 import io
-from process_lcms_data import (
-    process, read_raw, classify_compounds, resolve_roles,
-    compute_preview_summary, compute_preview_final_table, build_blank_mdl_evidence,
-    parse_custom_ss_entries, compound_classification_rows, compound_metadata_for,
-)
+import importlib
+import process_lcms_data as processor
+
+# Streamlit Cloud can hot-reload this entry file while retaining the previous
+# helper module in the worker process. Reload before binding names so a new UI
+# and its matching processor helpers are always deployed atomically.
+processor = importlib.reload(processor)
+process = processor.process
+read_raw = processor.read_raw
+classify_compounds = processor.classify_compounds
+resolve_roles = processor.resolve_roles
+compute_preview_summary = processor.compute_preview_summary
+compute_preview_final_table = processor.compute_preview_final_table
+build_blank_mdl_evidence = processor.build_blank_mdl_evidence
+parse_custom_ss_entries = processor.parse_custom_ss_entries
+compound_classification_rows = processor.compound_classification_rows
+compound_metadata_for = processor.compound_metadata_for
 
 try:
-    from process_lcms_data import validate_input_layout
-except ImportError:
+    validate_input_layout = processor.validate_input_layout
+except AttributeError:
     # Keep the app bootable while Streamlit Cloud refreshes an older module cache.
     def validate_input_layout(blanks, mss, samps, target_compounds, is_compounds, ss_compounds):
         errors = []
