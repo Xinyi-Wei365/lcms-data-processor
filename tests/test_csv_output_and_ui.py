@@ -25,6 +25,29 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn("st.info(t('blank_workflow_before_upload', L))", source)
         self.assertIn('APP_VERSION', source)
 
+    def test_top_output_guide_documents_all_sheets_and_matches_current_formulas(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("with st.expander(t('output_guide_title', L), expanded=False):", source)
+        self.assertIn("guide_left, guide_right = st.columns(2)", source)
+        for marker in (
+            '① 基质加标浓度', '② 空白基质检出限', '③ 瓶内实测浓度',
+            '④ 最终计算浓度', '⑤ 描述性统计', '⑥ 计算说明',
+        ):
+            self.assertIn(marker, source)
+        self.assertIn('回收率（%）= MS实测浓度 ÷ 对应MS理论加标浓度 × 100%', source)
+        self.assertIn('平均回收率 = 有效回收率的算术平均值', source)
+        self.assertIn('SE = SD ÷ √有效回收率数量', source)
+        self.assertIn('瓶内MDL = Blank平均值 + t(0.99，n−1) × Blank标准差', source)
+        self.assertIn('瓶内MDL = 3 × 标曲浓度C ÷ S/N', source)
+        self.assertIn('1/2样本MDL = 瓶内MDL ÷ 2 × 换算因子', source)
+        self.assertIn('原始瓶内浓度 ≥ 瓶内MDL', source)
+        self.assertIn('最终浓度 =（瓶内实测浓度 − Blank平均值）× 换算因子', source)
+        self.assertIn('DF（%）= 真实检出样品数 ÷ 有效样品数 × 100%', source)
+        self.assertIn('Blank≠0：MQL =（Blank平均值 + 10 × Blank标准差）× 换算因子', source)
+        self.assertIn('Blank=0：MQL = 10 × 标曲浓度C ÷ S/N × 换算因子', source)
+        self.assertNotIn('MQL = 3.333333 × MDL', source)
+
     def test_main_interface_shows_detailed_ss_and_is_per_ms_examples(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()

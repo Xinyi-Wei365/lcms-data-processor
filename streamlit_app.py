@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-concise-ss-help-v9'
+APP_VERSION = '2026.08.17-output-guide-v10'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -81,6 +81,87 @@ def read_preview_table(file_bytes):
 T = {
     'page_title':           {'zh': 'LC-MS/MS 数据处理智能体',                    'en': 'LC-MS/MS Data Processing Agent'},
     'page_subtitle':        {'zh': '上传 MassHunter 原始数据 → 一键生成完整分析表格 → 下载', 'en': 'Upload MassHunter raw data → Auto-generate standard tables → Download'},
+    'output_guide_title':   {'zh': '📘 输出表及计算方法（点击展开）', 'en': '📘 Output sheets and calculations (click to expand)'},
+    'output_guide_matrix': {
+        'zh': '''**① 基质加标浓度**
+
+- 包含目标物和SS在各MS列中的实测浓度、回收率、平均回收率、SD和SE。
+- 回收率（%）= MS实测浓度 ÷ 对应MS理论加标浓度 × 100%。SS使用用户填写的自身理论基质加标浓度。
+- 平均回收率 = 有效回收率的算术平均值；SD = 有效回收率的样本标准差；SE = SD ÷ √有效回收率数量。
+- 回收率、平均值、SD和SE四舍五入为整数。IS仅记录，不计算回收率。''',
+        'en': '''**1. Matrix spike**
+
+- Contains measured MS concentrations, recoveries, mean recovery, SD and SE for targets and SS compounds.
+- Recovery (%) = measured MS concentration / theoretical spike for the corresponding MS × 100%. SS uses its user-entered own theoretical spike.
+- Mean = arithmetic mean of valid recoveries; SD = sample SD; SE = SD / √number of valid recoveries.
+- Recovery statistics are rounded to integers. IS is recorded only and has no recovery calculation.''',
+    },
+    'output_guide_blank': {
+        'zh': '''**② 空白基质检出限**
+
+- 包含Blank原始值、Blank平均值、瓶内MDL和1/2样本MDL；空单元格不作为0参与计算。
+- Blank≠0：Blank平均值 = 有效Blank值的算术平均值；Blank标准差 = 有效Blank值的样本标准差；瓶内MDL = Blank平均值 + t(0.99，n−1) × Blank标准差。n为有效Blank数量，系统按自由度n−1自动选取单侧99% t值。
+- Blank全部为数值0：瓶内MDL = 3 × 标曲浓度C ÷ S/N，C和S/N由用户逐化合物填写。
+- 1/2样本MDL = 瓶内MDL ÷ 2 × 换算因子。''',
+        'en': '''**2. Blank MDL**
+
+- Contains raw blank values, blank mean, vial MDL and half sample-unit MDL. Empty cells are not treated as zero.
+- Non-zero blank path: vial MDL = blank mean + t(0.99, n−1) × sample SD of valid blanks. The one-sided 99% t value follows the actual valid blank count n.
+- All-numeric-zero blank path: vial MDL = 3 × calibration concentration C / S/N; C and S/N are entered per compound.
+- Half sample MDL = vial MDL / 2 × conversion factor.''',
+    },
+    'output_guide_bottle': {
+        'zh': '''**③ 瓶内实测浓度**
+
+- 按化合物展示MassHunter原始文件中的各样品仪器导出浓度，单位沿用导入单位（当前为ppb）。
+- 本表只保留原始瓶内数值，不扣除Blank平均值，也不应用换算因子；原始空单元格仍为空。''',
+        'en': '''**3. Concentration in vial**
+
+- Shows instrument-exported sample concentrations from the MassHunter source for each compound, using the imported unit (currently ppb).
+- Values are copied without blank subtraction or conversion; original empty cells remain empty.''',
+    },
+    'output_guide_final': {
+        'zh': '''**④ 最终计算浓度**
+
+- 真实检出判定：原始瓶内浓度 ≥ 瓶内MDL。
+- 检出时：最终浓度 =（瓶内实测浓度 − Blank平均值）× 换算因子。
+- 未检出但原始值有效时：最终浓度 = 1/2样本MDL；原始单元格为空时，最终结果仍为空。
+- 已经过IS校正：换算因子=1；未经过IS校正：换算因子=最终定容体积 ÷ 取样体积或质量 × 额外稀释倍数。
+- 同时给出DF、Mean、Geometric Mean、Median、Min、Max及第5、25、75、95百分位数。''',
+        'en': '''**4. Final concentration**
+
+- True detection: original vial concentration ≥ vial MDL.
+- Detected: final concentration = (measured vial concentration − blank mean) × conversion factor.
+- Valid non-detect: final concentration = half sample MDL. An originally empty cell remains empty.
+- IS corrected: conversion factor = 1. Not IS corrected: final volume / sample volume or mass × extra dilution.
+- Also reports DF, mean, geometric mean, median, min, max and the 5th, 25th, 75th and 95th percentiles.''',
+    },
+    'output_guide_summary': {
+        'zh': '''**⑤ 描述性统计**
+
+- 包含名称、链长、DF（%）、Median（Q1–Q3）、MDL和MQL，结果按3位有效数字展示。
+- DF（%）= 真实检出样品数 ÷ 有效样品数 × 100%。有效样品是原始瓶内浓度不为空的样品；1/2 MDL替代值不算真实检出。
+- Median、Q1和Q3使用所有有效最终浓度：真实检出使用计算后的最终浓度，未检出使用1/2样本MDL；原始空单元格不参与统计。Q1和Q3分别为第25和第75百分位数。
+- MDL = 瓶内MDL × 换算因子。
+- Blank≠0：MQL =（Blank平均值 + 10 × Blank标准差）× 换算因子；Blank=0：MQL = 10 × 标曲浓度C ÷ S/N × 换算因子。''',
+        'en': '''**5. Descriptive statistics**
+
+- Contains name, chain length, DF (%), Median (Q1–Q3), MDL and MQL, shown to three significant figures.
+- DF (%) = true detections / valid samples × 100%. A valid sample has a non-empty original vial value; half-MDL substitutions are not true detections.
+- Median, Q1 and Q3 use all valid final values: calculated concentrations for detections and half sample MDL for non-detects. Original empty cells are excluded. Q1 and Q3 are the 25th and 75th percentiles.
+- MDL = vial MDL × conversion factor.
+- Non-zero blank: MQL = (blank mean + 10 × blank SD) × conversion factor. Blank zero: MQL = 10 × C / S/N × conversion factor.''',
+    },
+    'output_guide_notes': {
+        'zh': '''**⑥ 计算说明**
+
+- 记录本次处理采用的样品类型、取样量、定容体积、IS校正状态、换算因子及主要计算规则。
+- 同时记录Blank=0与Blank≠0的MDL/MQL路径、检出判定、1/2 MDL替代规则，以及IS按MS列的加入浓度记录（如有填写），便于追溯和复核。''',
+        'en': '''**6. Calculation notes**
+
+- Records sample type, sample amount, final volume, IS-correction status, conversion factor and the principal calculation rules used for the run.
+- Also records the zero/non-zero blank MDL and MQL paths, detection and half-MDL substitution rules, and per-MS IS addition records when supplied, for traceability.''',
+    },
     'sidebar_header':       {'zh': '📋 实验参数',                                'en': '📋 Experiment Parameters'},
     'sample_type':          {'zh': '样本类型',                                   'en': 'Sample Type'},
     'sample_type_opts':     {'zh': ['尿液','灰尘','土壤','水','其他'],             'en': ['Urine','Dust','Soil','Water','Other']},
@@ -260,6 +341,21 @@ with st.sidebar:
 st.title(f"🔬 {t('page_title', L)}")
 st.markdown(t('page_subtitle', L))
 st.caption(f'Version: {APP_VERSION}')
+
+with st.expander(t('output_guide_title', L), expanded=False):
+    guide_left, guide_right = st.columns(2)
+    with guide_left:
+        st.markdown(t('output_guide_matrix', L))
+        st.divider()
+        st.markdown(t('output_guide_blank', L))
+        st.divider()
+        st.markdown(t('output_guide_bottle', L))
+    with guide_right:
+        st.markdown(t('output_guide_final', L))
+        st.divider()
+        st.markdown(t('output_guide_summary', L))
+        st.divider()
+        st.markdown(t('output_guide_notes', L))
 
 # ============================================================
 # 侧边栏
