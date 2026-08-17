@@ -63,7 +63,8 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertNotIn("st.dataframe(pd.DataFrame(ss_example_rows", source)
         self.assertNotIn("st.dataframe(pd.DataFrame(is_example_rows", source)
         # Concise examples remain in the real sidebar inputs.
-        self.assertIn('d7-C12-BAC，4，8，12', source)
+        self.assertIn('d9-C10-ATMAC, 4, 4', source)
+        self.assertIn('d7-C12-BAC, 4, 4', source)
         self.assertIn('IS-A；IS-B', source)
 
     def test_export_csv_contains_summary_columns_and_numeric_preview(self):
@@ -135,7 +136,8 @@ class CsvOutputAndUiTests(unittest.TestCase):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn("'custom_ss'", source)
-        self.assertIn('d7-C12-BAC，4，8，12', source)
+        self.assertIn('d9-C10-ATMAC, 4, 4', source)
+        self.assertIn('d7-C12-BAC, 4, 4', source)
         self.assertIn('parse_ss_matrix_spike_entries(', source)
         self.assertIn('missing_custom_ss', source)
         self.assertIn('SS基质加标浓度必须填写', source)
@@ -177,8 +179,8 @@ class CsvOutputAndUiTests(unittest.TestCase):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn('每行填写一个替代物：名称，MS1加标浓度，MS2加标浓度……', source)
-        self.assertIn('d7-C12-BAC，4，8，12', source)
-        self.assertIn('d9-C10-ATMAC；2；2；4', source)
+        self.assertIn('d9-C10-ATMAC, 4, 4', source)
+        self.assertIn('d7-C12-BAC, 4, 4', source)
         self.assertNotIn("key=f'ss_matrix_spike_{ss_index}_{ms_index}'", source)
         table_region = source[source.index('ms_rows = []'):source.index('ms_table = st.data_editor')]
         self.assertNotIn("roles_for_ms['ss_compounds']", table_region)
@@ -187,6 +189,8 @@ class CsvOutputAndUiTests(unittest.TestCase):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn('每行填写一个替代物：名称，MS1加标浓度，MS2加标浓度……', source)
+        self.assertIn('示例：\\nd9-C10-ATMAC, 4, 4\\nd7-C12-BAC, 4, 4', source)
+        self.assertIn('Example:\\nd9-C10-ATMAC, 4, 4\\nd7-C12-BAC, 4, 4', source)
         self.assertIn('名称须与原始表完全一致', source)
         self.assertIn('不是原始表中的MS实测浓度', source)
         self.assertIn('实际有几个MS，就填写几个浓度', source)
