@@ -29,7 +29,7 @@ missing_matrix_spike_entries = processor.missing_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-required-ss-spikes-v5'
+APP_VERSION = '2026.08.17-sidebar-ss-spikes-v6'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -212,6 +212,8 @@ T = {
     'custom_is_missing': {'zh': '未在上传文件中找到自定义 IS：', 'en': 'Custom IS was not found in the uploaded file: '},
     'custom_ss_missing': {'zh': '未在上传文件中找到自定义 SS：', 'en': 'Custom SS was not found in the uploaded file: '},
     'ss_spike_required': {'zh': 'SS基质加标浓度必须填写完整，不能使用系统猜测值。请填写：', 'en': 'Every SS matrix-spike concentration is required; the app will not guess values. Enter: '},
+    'ss_spike_sidebar_header': {'zh': 'SS替代物基质加标浓度（必填）', 'en': 'SS matrix-spike concentrations (required)'},
+    'ss_spike_sidebar_help': {'zh': '以下是实际计算输入，不是示例。系统根据上传文件识别到的MS列自动生成；请填写每个SS在每个MS中的自身基质加标浓度。', 'en': 'These are real calculation inputs, not examples. They follow the MS columns detected in the uploaded file; enter each SS compound’s own matrix-spike concentration for every MS.'},
     'role_overlap': {'zh': '同一化合物不能同时作为 IS 与 SS：', 'en': 'An analyte cannot be both IS and SS: '},
 }
 
@@ -494,13 +496,29 @@ if file_bytes:
             st.caption(t('ms_spike_help', L))
             st.info(t('ms_spike_example', L))
             roles_for_ms = resolve_roles(all_c, selected_is, selected_ss)
+            ss_matrix_spike_concentrations = {}
+            with st.sidebar:
+                st.subheader(t('ss_spike_sidebar_header', L))
+                st.caption(t('ss_spike_sidebar_help', L))
+                for ss_index, ss_name in enumerate(roles_for_ms['ss_compounds']):
+                    st.markdown(f'**{ss_name}**')
+                    ss_matrix_spike_concentrations[ss_name] = {}
+                    for ms_index, (_, _, header) in enumerate(mss, 1):
+                        ss_value = st.number_input(
+                            (f'{ss_name} / MS{ms_index} 基质加标浓度（ppb）' if L == 'zh'
+                             else f'{ss_name} / MS{ms_index} matrix-spike concentration (ppb)'),
+                            min_value=0.000001,
+                            value=None,
+                            step=0.1,
+                            format='%.6f',
+                            key=f'ss_matrix_spike_{ss_index}_{ms_index}',
+                        )
+                        ss_matrix_spike_concentrations[ss_name][header] = processor.safe_float(ss_value)
             ms_rows = []
             compound_column = t('ms_table_compound', L)
             role_column = t('ms_table_role', L)
-            for role, names in (('Target', roles_for_ms['target_compounds']), ('SS', roles_for_ms['ss_compounds'])):
-                for name in names:
-                    default_concentration = None if role == 'SS' else float(spike_conc)
-                    ms_rows.append({compound_column: name, role_column: role_label(role, L), **{header: default_concentration for _, _, header in mss}})
+            for name in roles_for_ms['target_compounds']:
+                ms_rows.append({compound_column: name, role_column: role_label('Target', L), **{header: float(spike_conc) for _, _, header in mss}})
             ms_table = st.data_editor(
                 pd.DataFrame(ms_rows),
                 column_config={
@@ -517,6 +535,7 @@ if file_bytes:
                 row[compound_column]: {header: processor.safe_float(row[header]) for _, _, header in mss}
                 for _, row in ms_table.iterrows()
             }
+            matrix_spike_concentrations.update(ss_matrix_spike_concentrations)
             missing_ss_spikes = missing_matrix_spike_entries(
                 roles_for_ms['ss_compounds'],
                 [header for _, _, header in mss],

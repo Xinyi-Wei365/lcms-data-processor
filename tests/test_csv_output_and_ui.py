@@ -146,11 +146,21 @@ class CsvOutputAndUiTests(unittest.TestCase):
     def test_ss_matrix_spike_cells_have_no_silent_four_ppb_default_and_are_required(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn("default_concentration = None if role == 'SS'", source)
-        self.assertIn('required=True', source)
+        self.assertIn("key=f'ss_matrix_spike_{ss_index}_{ms_index}'", source)
+        self.assertIn('value=None', source)
         self.assertIn('missing_matrix_spike_entries(', source)
         self.assertIn('not ss_spike_ready', source)
         self.assertNotIn('ss_concentrations = {name: 4.0', source)
+
+    def test_dynamic_ss_matrix_spike_inputs_are_rendered_in_sidebar(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("with st.sidebar:\n                st.subheader(t('ss_spike_sidebar_header', L))", source)
+        self.assertIn("for ss_index, ss_name in enumerate(roles_for_ms['ss_compounds'])", source)
+        self.assertIn("for ms_index, (_, _, header) in enumerate(mss, 1)", source)
+        self.assertIn("f'{ss_name} / MS{ms_index} 基质加标浓度（ppb）'", source)
+        table_region = source[source.index('ms_rows = []'):source.index('ms_table = st.data_editor')]
+        self.assertNotIn("roles_for_ms['ss_compounds']", table_region)
 
     def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:

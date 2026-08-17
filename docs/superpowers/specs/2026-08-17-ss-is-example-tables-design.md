@@ -22,6 +22,6 @@ The SS and IS custom-name input areas must show the exact accepted name syntax, 
 - Chinese semicolon: `；`
 - Tab character
 
-The interface must include copyable SS and IS name examples. After upload, the compound-by-MS table is the source of truth for target and SS matrix-spike concentrations in every detected MS column. Every SS cell is required and must start empty; the app must not assume a default such as 4 ppb. Processing remains disabled until all SS cells contain positive values. The SS recovery calculation pairs each measured MS value from the source with the user-entered SS matrix-spike concentration for that same MS column.
+The interface must include copyable SS and IS name examples. After upload, the left sidebar dynamically creates one real concentration input for every SS-by-MS pair; the read-only main-page example is never an input control. The main-page compound-by-MS editor remains the source of target-analyte spike concentrations only. Every sidebar SS input is required and must start empty; the app must not assume a default such as 4 ppb. Processing remains disabled until all SS inputs contain positive values. The SS recovery calculation pairs each measured MS value from the source with the corresponding sidebar SS matrix-spike concentration.
 
 The parser and its validation messages must accept all five delimiters so the displayed guidance matches actual behavior. Invalid lines must identify the line number and restate the accepted input pattern.
