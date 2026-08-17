@@ -6,15 +6,15 @@ Show detailed SS and IS per-MS concentration examples on the main interface befo
 
 ## Confirmed content
 
-The SS example table contains `SS替代物`, `MS1理论加入`, `MS2理论加入`, and `MS3理论加入`, with `d7-C12-BAC` values `4`, `8`, and `12`. The caption states that these are theoretical additions used as the denominator of SS recovery; measured MS concentrations are read automatically from the uploaded source.
+The SS example table contains `SS替代物`, `MS1基质加标浓度（ppb）`, `MS2基质加标浓度（ppb）`, and `MS3基质加标浓度（ppb）`. It shows `d7-C12-BAC` values `4`, `8`, `12` and `d9-C10-ATMAC` values `2`, `2`, `4`. These values are the SS compound's own matrix-spike concentrations used as the denominator of recovery; they are not measured MS concentrations. Measured concentrations are read automatically from the uploaded source.
 
-The IS example table contains `IS内标`, `MS1加入浓度（ppb）`, `MS2加入浓度（ppb）`, and `MS3加入浓度（ppb）`, with `IS-A` values `5`, `5`, `10` and `IS-B` values `2`, `4`, `4`. The caption states that these are experimental additions recorded in the output and do not calculate recovery.
+The IS example table contains only `IS内标化合物名称`, with `IS-A` and `IS-B`. Users enter IS names only. The app matches those names to uploaded compounds; IS has no matrix-spike concentration input and no recovery calculation.
 
-Both tables are bilingual and always visible. The actual compound-by-MS editor remains file-driven and uses the uploaded file's real MS columns.
+Both tables are bilingual and always visible. MS1/MS2/MS3 are examples only. The actual compound-by-MS editor remains file-driven and creates fewer or more columns to match every real MS column in the uploaded file. That editor contains target compounds and SS compounds, but excludes IS compounds.
 
 ## User input punctuation guidance
 
-The SS and IS custom-name input areas must show the exact accepted syntax, not only the rendered example tables. Each line represents one compound and contains a compound name followed by one positive numeric default concentration. The name and concentration may be separated by any one of these delimiters:
+The SS and IS custom-name input areas must show the exact accepted syntax, not only the rendered example tables. Users enter compound names only, without concentrations. Multiple names may be separated by any one of these delimiters:
 
 - English comma: `,`
 - Chinese comma: `，`
@@ -22,6 +22,6 @@ The SS and IS custom-name input areas must show the exact accepted syntax, not o
 - Chinese semicolon: `；`
 - Tab character
 
-The interface must tell users not to enter quotation marks, table headers, or the text/unit `ppb` in the concentration field. It must include copyable SS and IS examples and explain that the single concentration entered here is only the initial/default value; after upload, the compound-by-MS table is the source of truth for different MS1, MS2, and MS3 additions.
+The interface must include copyable SS and IS name examples. After upload, the compound-by-MS table is the source of truth for target and SS matrix-spike concentrations in every detected MS column. The SS recovery calculation pairs each measured MS value from the source with the user-entered SS matrix-spike concentration for that same MS column.
 
 The parser and its validation messages must accept all five delimiters so the displayed guidance matches actual behavior. Invalid lines must identify the line number and restate the accepted input pattern.

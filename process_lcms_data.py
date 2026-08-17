@@ -467,6 +467,23 @@ def parse_custom_ss_entries(text):
     return entries, errors
 
 
+def parse_compound_name_entries(text):
+    """Parse compound names separated by lines, commas, semicolons, or tabs.
+
+    Both English and Chinese comma/semicolon characters are accepted. Names
+    are normalized, de-duplicated, and returned in the user's original order.
+    """
+    names = []
+    seen = set()
+    for raw_name in re.split(r'[,，;；\t\r\n]+', str(text or '')):
+        name = normalize_analyte_name(raw_name.strip())
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        names.append(name)
+    return names
+
+
 def one_sided_t99(sample_count):
     """Return t(0.99, n-1) for the available number of replicates."""
     n = int(sample_count or 0)

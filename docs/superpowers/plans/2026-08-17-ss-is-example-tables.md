@@ -22,7 +22,7 @@
 - [ ] Run the focused test and confirm it passes.
 - [ ] Run the full suite and Streamlit pre-upload/Demo smoke tests.
 
-### Task 2: Punctuation-compatible SS and IS input guidance
+### Task 2: Name-only SS/IS input and dynamic MS concentrations
 
 **Files:**
 - Modify: `process_lcms_data.py:442-469`
@@ -30,11 +30,11 @@
 - Test: `tests/test_dynamic_rules.py`
 - Test: `tests/test_csv_output_and_ui.py`
 
-- [ ] Add a failing parser test that supplies `SS-A, 1`, `SS-B，2`, `SS-C;3`, `SS-D；4`, and `SS-E\t5`, and asserts that all five names and concentrations are accepted.
-- [ ] Run `python -m unittest tests.test_dynamic_rules.DynamicRulesTests.test_custom_ss_entries_accepts_all_documented_delimiters -v` and confirm it fails for the Chinese delimiters.
-- [ ] Extend the delimiter expression in `parse_custom_ss_entries()` to accept English/Chinese comma, English/Chinese semicolon, and Tab while retaining one-compound-per-line validation.
-- [ ] Add failing UI assertions for bilingual punctuation instructions, the prohibition on entering `ppb`, and copyable SS/IS examples.
+- [ ] Add a failing parser test that supplies names separated by English/Chinese comma, English/Chinese semicolon, Tab, and newline, and asserts that all names are accepted and duplicates are removed without reordering.
+- [ ] Run the focused parser tests and confirm they fail because the name-only parser does not exist.
+- [ ] Add `parse_compound_name_entries()` for name-only SS/IS input.
+- [ ] Add failing UI assertions for bilingual punctuation instructions, copyable SS/IS name examples, dynamic MS columns, and IS exclusion from the concentration editor.
 - [ ] Run the focused UI test and confirm the new assertions fail before changing production text.
-- [ ] Update the bilingual SS/IS help and placeholder text so the accepted punctuation and input restrictions are explicit, and clarify that the post-upload compound-by-MS grid controls per-MS values.
+- [ ] Update the bilingual SS/IS help and placeholder text so both inputs accept names only. Rename SS example and editor columns to matrix-spike concentration, dynamically label all detected MS columns, and exclude IS from the editor.
 - [ ] Run both focused tests and confirm they pass.
 - [ ] Run `python -m unittest discover -s tests -v` and `git diff --check` before committing.

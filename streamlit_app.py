@@ -24,10 +24,11 @@ compute_preview_summary = processor.compute_preview_summary
 compute_preview_final_table = processor.compute_preview_final_table
 build_blank_mdl_evidence = processor.build_blank_mdl_evidence
 parse_custom_ss_entries = processor.parse_custom_ss_entries
+parse_compound_name_entries = processor.parse_compound_name_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-ss-is-examples-v3'
+APP_VERSION = '2026.08.17-dynamic-ss-is-names-v4'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -98,20 +99,20 @@ T = {
     'cf_editable':          {'zh': '（可手动覆盖）',                              'en': ' (Editable)'},
     'spike_conc':           {'zh': '基质加标浓度 (ppb)',                          'en': 'Matrix Spike Conc (ppb)'},
     'ms_spike_header':      {'zh': '基质加标浓度设置（化合物 × MS列）',               'en': 'Matrix-spike concentrations (compound × MS column)'},
-    'ms_spike_help':        {'zh': '逐格填写每种化合物在每个 MS 样品中的实际加标浓度。示例：C8-BAC 的 MS1/MS2/MS3 为 10/20/10 ppb；SS 也逐格填其自身浓度并据此计算回收率；IS 逐格记录但不参与回收率或浓度换算。',
-                             'en': 'Enter the actual spike amount for every compound in every MS sample. Example: C8-BAC MS1/MS2/MS3 = 10/20/10 ppb. SS uses its own per-cell amount for recovery; IS values are recorded only.'},
-    'ms_spike_example':     {'zh': '示例：目标物 C8-BAC 可填 MS1=10、MS2=20、MS3=10；SS d7-C12-BAC 可填 4、4、2；IS C13-C12-BAC 可填 4、4、4（仅记录）。',
-                             'en': 'Example: target C8-BAC = 10, 20, 10; SS d7-C12-BAC = 4, 4, 2; IS C13-C12-BAC = 4, 4, 4 (record only).'},
-    'ss_is_example_header': {'zh': 'SS替代物与IS内标逐MS浓度填写示例', 'en': 'SS surrogate and IS internal-standard per-MS examples'},
-    'ss_example_title': {'zh': 'SS替代物理论加入浓度示例', 'en': 'SS theoretical addition example'},
+    'ms_spike_help':        {'zh': '系统根据上传文件的实际MS列数量自动增减输入列。逐格填写目标物和SS替代物在对应MS中的基质加标浓度（ppb）；原始表中的MS实测浓度由系统自动读取。SS回收率 = 对应MS实测浓度 ÷ 对应MS基质加标浓度 × 100%。IS不在此表填写浓度，也不计算回收率。',
+                             'en': 'Input columns automatically follow the actual number of MS columns in the uploaded file. Enter the matrix-spike concentration for each target and SS in each corresponding MS; measured MS values are read from the source. SS recovery = measured MS concentration / corresponding MS matrix-spike concentration × 100%. IS has no concentration entry or recovery here.'},
+    'ms_spike_example':     {'zh': '示例中的MS1、MS2、MS3仅用于说明；真实输入表会按原始文件的实际MS列数量动态生成，可能少于或多于3列。',
+                             'en': 'MS1, MS2 and MS3 are examples only. The real input grid is generated dynamically and may contain fewer or more than three MS columns.'},
+    'ss_is_example_header': {'zh': 'SS基质加标浓度与IS内标名称填写示例', 'en': 'SS matrix-spike concentration and IS name examples'},
+    'ss_example_title': {'zh': 'SS替代物基质加标浓度示例', 'en': 'SS matrix-spike concentration example'},
     'ss_example_help': {
-        'zh': '这些数值是实验时SS自身的理论加入浓度，是SS回收率计算的分母；MS1、MS2、MS3的仪器实测浓度由系统从上传文件自动读取。回收率 = 对应MS实测浓度 ÷ 对应MS理论加入浓度 × 100%。',
-        'en': 'These values are the theoretical SS additions and form the recovery denominator. Measured MS1/MS2/MS3 concentrations are read automatically from the uploaded file. Recovery = measured MS concentration ÷ theoretical addition × 100%.',
+        'zh': '这些数值是SS自身在对应MS样品中的基质加标浓度，是SS回收率计算的分母，不是原始表中的MS实测浓度。实测浓度由系统自动读取。示例只展示3个MS；真实输入列数按上传文件动态生成。',
+        'en': 'These are the SS matrix-spike concentrations used as recovery denominators, not the measured MS values in the source file. Measured values are read automatically. Three MS columns are shown only as an example; the real grid follows the uploaded file.',
     },
-    'is_example_title': {'zh': 'IS内标加入浓度示例', 'en': 'IS addition example'},
+    'is_example_title': {'zh': 'IS内标名称输入示例', 'en': 'IS name input example'},
     'is_example_help': {
-        'zh': '这些数值是实验时每个MS样品加入的IS内标浓度，仅用于输出记录，不计算IS回收率，也不会替代“数据是否经过IS校正”的选择。',
-        'en': 'These values are the IS additions to each MS sample. They are recorded in the output only, do not calculate IS recovery, and do not replace the IS-corrected setting.',
+        'zh': 'IS只输入化合物名称，不输入加入浓度。系统将名称与上传文件中的化合物自动匹配并识别为IS；IS不计算回收率。是否经过IS校正仍由相应选项决定。',
+        'en': 'Enter IS compound names only, without addition concentrations. The app matches them to uploaded compounds and marks them as IS. IS recovery is not calculated; the IS-corrected option remains separate.',
     },
     'ms_table_compound': {'zh': '化合物名称', 'en': 'Compound name'},
     'ms_table_role': {'zh': '类型/角色', 'en': 'Type / role'},
@@ -140,13 +141,13 @@ T = {
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
     'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
-    'custom_ss_help':       {'zh': '每行输入“名称, 理论加标浓度(ppb)”。示例：d7-C12-BAC, 4。名称必须与上传文件的化合物名称一致；系统将其列为 SS，并按“SS 实测值 ÷ 该 SS 加标浓度 × 100%”计算。', 'en': 'One per line: “name, theoretical spike concentration (ppb)”. Example: d7-C12-BAC, 4. The name must match an imported compound; it will be treated as SS and recovery = measured SS ÷ its spike concentration × 100%.'},
-    'custom_ss_placeholder': {'zh': 'd7-C12-BAC, 4\nMy Surrogate, 2.5',             'en': 'd7-C12-BAC, 4\nMy Surrogate, 2.5'},
+    'custom_ss_help':       {'zh': '这里只输入SS化合物名称，不输入浓度。多个名称可使用：英文逗号“,”、中文逗号“，”、英文分号“;”、中文分号“；”、Tab或换行分隔。名称须与上传文件一致。上传后，系统会按实际MS列数量生成基质加标浓度表；用户填写的SS基质加标浓度是回收率分母，原始MS实测浓度由系统自动读取。', 'en': 'Enter SS compound names only, without concentrations. Separate names with an English comma, Chinese comma, English semicolon, Chinese semicolon, Tab, or a new line. Names must match the uploaded file. After upload, the app creates matrix-spike inputs for the actual MS columns; SS matrix-spike concentrations are recovery denominators and measured MS values are read automatically.'},
+    'custom_ss_placeholder': {'zh': 'd7-C12-BAC，d9-C10-ATMAC\nMy Surrogate',             'en': 'd7-C12-BAC, d9-C10-ATMAC\nMy Surrogate'},
     'custom_is':            {'zh': '自定义 IS 内标（可选）',                         'en': 'Custom IS internal standards (optional)'},
-    'custom_is_help':       {'zh': '每行输入“名称, 加入浓度(ppb)”。名称必须与上传文件一致；该信息只记录在输出文件中，不会改变浓度计算。是否使用 IS 校正仍由上方“数据是否经过内标（IS）校正？”决定。',
-                             'en': 'One per line: “name, addition concentration (ppb)”. Names must match the uploaded file. Values are recorded in output only and do not alter concentration calculations; IS correction is controlled solely by the question above.'},
-    'custom_is_placeholder': {'zh': 'C13-Internal Standard, 4\nMy Internal Standard, 2.5',
-                              'en': 'C13-Internal Standard, 4\nMy Internal Standard, 2.5'},
+    'custom_is_help':       {'zh': '这里只输入IS化合物名称，不输入浓度。多个名称可使用：英文逗号“,”、中文逗号“，”、英文分号“;”、中文分号“；”、Tab或换行分隔。系统会与上传文件中的化合物自动匹配并识别为IS；IS不计算回收率。是否使用IS校正仍由上方选项决定。',
+                             'en': 'Enter IS compound names only, without concentrations. Separate names with an English comma, Chinese comma, English semicolon, Chinese semicolon, Tab, or a new line. The app matches them to uploaded compounds and marks them as IS. IS recovery is not calculated; the IS-corrected option remains separate.'},
+    'custom_is_placeholder': {'zh': 'IS-A；IS-B\nC13-Internal Standard',
+                              'en': 'IS-A; IS-B\nC13-Internal Standard'},
     'blank_zero_help':      {'zh': '系统逐化合物判断：全部 blank 为数值0时填写标曲浓度和 S/N；blank 含非零值时自动使用均值、动态 t 值和 SD。', 'en': 'Each compound is evaluated independently: enter calibration concentration and S/N when every blank is numeric zero; non-zero blanks use mean, dynamic t and SD automatically.'},
     'calibration':          {'zh': '标曲浓度 (ppb)',                              'en': 'Calibration concentration (ppb)'},
     'sn':                   {'zh': 'S/N',                                         'en': 'S/N'},
@@ -372,9 +373,15 @@ with example_left:
     st.markdown(f"**{t('ss_example_title', L)}**")
     st.caption(t('ss_example_help', L))
     ss_example_rows = (
-        [{'SS替代物': 'd7-C12-BAC', 'MS1理论加入': 4, 'MS2理论加入': 8, 'MS3理论加入': 12}]
+        [
+            {'SS替代物': 'd7-C12-BAC', 'MS1基质加标浓度（ppb）': 4, 'MS2基质加标浓度（ppb）': 8, 'MS3基质加标浓度（ppb）': 12},
+            {'SS替代物': 'd9-C10-ATMAC', 'MS1基质加标浓度（ppb）': 2, 'MS2基质加标浓度（ppb）': 2, 'MS3基质加标浓度（ppb）': 4},
+        ]
         if L == 'zh' else
-        [{'SS surrogate': 'd7-C12-BAC', 'MS1 theoretical addition': 4, 'MS2 theoretical addition': 8, 'MS3 theoretical addition': 12}]
+        [
+            {'SS surrogate': 'd7-C12-BAC', 'MS1 matrix spike (ppb)': 4, 'MS2 matrix spike (ppb)': 8, 'MS3 matrix spike (ppb)': 12},
+            {'SS surrogate': 'd9-C10-ATMAC', 'MS1 matrix spike (ppb)': 2, 'MS2 matrix spike (ppb)': 2, 'MS3 matrix spike (ppb)': 4},
+        ]
     )
     st.dataframe(pd.DataFrame(ss_example_rows), width='stretch', hide_index=True)
 with example_right:
@@ -382,13 +389,13 @@ with example_right:
     st.caption(t('is_example_help', L))
     is_example_rows = (
         [
-            {'IS内标': 'IS-A', 'MS1加入浓度（ppb）': 5, 'MS2加入浓度（ppb）': 5, 'MS3加入浓度（ppb）': 10},
-            {'IS内标': 'IS-B', 'MS1加入浓度（ppb）': 2, 'MS2加入浓度（ppb）': 4, 'MS3加入浓度（ppb）': 4},
+            {'IS内标化合物名称': 'IS-A'},
+            {'IS内标化合物名称': 'IS-B'},
         ]
         if L == 'zh' else
         [
-            {'IS internal standard': 'IS-A', 'MS1 addition (ppb)': 5, 'MS2 addition (ppb)': 5, 'MS3 addition (ppb)': 10},
-            {'IS internal standard': 'IS-B', 'MS1 addition (ppb)': 2, 'MS2 addition (ppb)': 4, 'MS3 addition (ppb)': 4},
+            {'IS internal-standard compound name': 'IS-A'},
+            {'IS internal-standard compound name': 'IS-B'},
         ]
     )
     st.dataframe(pd.DataFrame(is_example_rows), width='stretch', hide_index=True)
@@ -464,17 +471,13 @@ if file_bytes:
             }
         selected_is = [name for name, meta in compound_metadata.items() if meta['role'] == 'IS']
         selected_ss = [name for name, meta in compound_metadata.items() if meta['role'] == 'SS']
-        custom_is, custom_is_errors = parse_custom_ss_entries(custom_is_text)
-        for message in custom_is_errors:
-            st.error(message.replace('SS', 'IS'))
+        custom_is = parse_compound_name_entries(custom_is_text)
         missing_custom_is = [name for name in custom_is if name not in all_c]
         if missing_custom_is:
             st.error(t('custom_is_missing', L) + ', '.join(missing_custom_is))
         valid_custom_is = [name for name in custom_is if name in all_c]
         selected_is = list(dict.fromkeys(selected_is + valid_custom_is))
-        custom_ss, custom_ss_errors = parse_custom_ss_entries(custom_ss_text)
-        for message in custom_ss_errors:
-            st.error(message)
+        custom_ss = parse_compound_name_entries(custom_ss_text)
         missing_custom_ss = [name for name in custom_ss if name not in all_c]
         if missing_custom_ss:
             st.error(t('custom_ss_missing', L) + ', '.join(missing_custom_ss))
@@ -491,17 +494,19 @@ if file_bytes:
             ms_rows = []
             compound_column = t('ms_table_compound', L)
             role_column = t('ms_table_role', L)
-            for role, names in (('Target', roles_for_ms['target_compounds']), ('SS', roles_for_ms['ss_compounds']), ('IS', roles_for_ms['is_compounds'])):
+            for role, names in (('Target', roles_for_ms['target_compounds']), ('SS', roles_for_ms['ss_compounds'])):
                 for name in names:
-                    default_concentration = (
-                        float(custom_ss.get(name, 4.0)) if role == 'SS'
-                        else float(custom_is.get(name, 4.0)) if role == 'IS'
-                        else float(spike_conc)
-                    )
+                    default_concentration = 4.0 if role == 'SS' else float(spike_conc)
                     ms_rows.append({compound_column: name, role_column: role_label(role, L), **{header: default_concentration for _, _, header in mss}})
             ms_table = st.data_editor(
                 pd.DataFrame(ms_rows),
-                column_config={header: st.column_config.NumberColumn(header, min_value=0.000001, step=0.1, format='%.6f') for _, _, header in mss},
+                column_config={
+                    header: st.column_config.NumberColumn(
+                        (f'MS{index}基质加标浓度（ppb）' if L == 'zh' else f'MS{index} matrix-spike concentration (ppb)'),
+                        min_value=0.000001, step=0.1, format='%.6f',
+                    )
+                    for index, (_, _, header) in enumerate(mss, 1)
+                },
                 disabled=[compound_column, role_column], hide_index=True, width='stretch',
                 key='compound_matrix_spike_concentration_table',
             )
@@ -511,8 +516,8 @@ if file_bytes:
             }
         # The two-dimensional MS table is the source of truth.  Keep these
         # one-value maps only as backward-compatible fallbacks for old files.
-        ss_concentrations = {name: float(custom_ss.get(name, 4.0)) for name in selected_ss}
-        is_spike_concentrations = {name: float(custom_is.get(name, 4.0)) for name in selected_is}
+        ss_concentrations = {name: 4.0 for name in selected_ss}
+        is_spike_concentrations = {}
 
         # This table reflects the final user-confirmed IS/SS selection, not
         # merely the name-pattern auto-detection shown immediately on import.

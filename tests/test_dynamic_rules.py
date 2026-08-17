@@ -113,6 +113,19 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual(entries, {})
         self.assertEqual(len(errors), 2)
 
+    def test_compound_name_input_accepts_all_documented_separators(self):
+        names = processor.parse_compound_name_entries(
+            'SS-A, SS-B，SS-C;SS-D；SS-E\tSS-F\nSS-G'
+        )
+        self.assertEqual(
+            names,
+            ['SS-A', 'SS-B', 'SS-C', 'SS-D', 'SS-E', 'SS-F', 'SS-G'],
+        )
+
+    def test_compound_name_input_removes_duplicates_without_reordering(self):
+        names = processor.parse_compound_name_entries('IS-A，IS-B\nIS-A')
+        self.assertEqual(names, ['IS-A', 'IS-B'])
+
     def test_custom_ss_is_moved_to_recovery_section_and_uses_its_own_spike(self):
         raw = (
             'Name,Ion,BLANK1,BLANK2,MS1,MS2,F1\n'

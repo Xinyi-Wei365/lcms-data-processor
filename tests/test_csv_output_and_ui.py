@@ -32,14 +32,14 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn('ss_example_rows =', source)
         self.assertIn('is_example_rows =', source)
         self.assertIn("'d7-C12-BAC'", source)
-        self.assertIn("'MS1理论加入': 4", source)
-        self.assertIn("'MS2理论加入': 8", source)
-        self.assertIn("'MS3理论加入': 12", source)
+        self.assertIn("'MS1基质加标浓度（ppb）': 4", source)
+        self.assertIn("'MS2基质加标浓度（ppb）': 8", source)
+        self.assertIn("'MS3基质加标浓度（ppb）': 12", source)
+        self.assertIn("'d9-C10-ATMAC'", source)
         self.assertIn("'IS-A'", source)
-        self.assertIn("'MS1加入浓度（ppb）': 5", source)
-        self.assertIn("'MS3加入浓度（ppb）': 10", source)
         self.assertIn("'IS-B'", source)
-        self.assertIn("'MS1加入浓度（ppb）': 2", source)
+        self.assertIn("'IS内标化合物名称': 'IS-A'", source)
+        self.assertNotIn("'MS1加入浓度（ppb）':", source)
         self.assertIn("st.dataframe(pd.DataFrame(ss_example_rows", source)
         self.assertIn("st.dataframe(pd.DataFrame(is_example_rows", source)
 
@@ -112,17 +112,34 @@ class CsvOutputAndUiTests(unittest.TestCase):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn("'custom_ss'", source)
-        self.assertIn('d7-C12-BAC, 4', source)
-        self.assertIn('parse_custom_ss_entries(custom_ss_text)', source)
+        self.assertIn('d7-C12-BAC，d9-C10-ATMAC', source)
+        self.assertIn('parse_compound_name_entries(custom_ss_text)', source)
         self.assertIn('missing_custom_ss', source)
 
-    def test_ui_exposes_custom_is_concentration_input_and_keeps_correction_separate(self):
+    def test_ui_exposes_custom_is_name_input_and_keeps_correction_separate(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn("'custom_is'", source)
-        self.assertIn('parse_custom_ss_entries(custom_is_text)', source)
-        self.assertIn('is_spike_concentrations', source)
+        self.assertIn('parse_compound_name_entries(custom_is_text)', source)
+        self.assertNotIn('float(custom_is.get(name, 4.0))', source)
         self.assertIn("'is_corrected': is_corrected", source)
+
+    def test_ui_documents_all_name_separators_and_dynamic_ms_columns(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        for marker in ('英文逗号“,”', '中文逗号“，”', '英文分号“;”', '中文分号“；”', 'Tab', '换行'):
+            self.assertIn(marker, source)
+        self.assertIn('MS1基质加标浓度（ppb）', source)
+        self.assertIn('MS2基质加标浓度（ppb）', source)
+        self.assertIn('MS3基质加标浓度（ppb）', source)
+        self.assertIn('实际MS列数量', source)
+        self.assertIn("for index, (_, _, header) in enumerate(mss, 1)", source)
+
+    def test_is_rows_are_not_added_to_matrix_spike_concentration_editor(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        table_region = source[source.index('ms_rows = []'):source.index('ms_table = st.data_editor')]
+        self.assertNotIn("('IS', roles_for_ms['is_compounds'])", table_region)
 
     def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
