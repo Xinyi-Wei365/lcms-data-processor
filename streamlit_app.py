@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-clean-main-v12'
+APP_VERSION = '2026.08.17-conversion-guide-v13'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -161,6 +161,20 @@ T = {
 
 - Records sample type, sample amount, final volume, IS-correction status, conversion factor and the principal calculation rules used for the run.
 - Also records the zero/non-zero blank MDL and MQL paths, detection and half-MDL substitution rules, and per-MS IS addition records when supplied, for traceability.''',
+    },
+    'output_guide_conversion': {
+        'zh': '''**换算因子是什么？**
+
+- 用于把进样瓶中的浓度换算为原始样品的体积浓度或质量浓度。
+- 已经过IS校正：换算因子 = 1。
+- 未经过IS校正：换算因子 = 最终定容体积 ÷ 取样体积或质量 × 额外稀释倍数。
+- 样品浓度 = 经Blank处理后的瓶内浓度 × 换算因子。''',
+        'en': '''**What is the conversion factor?**
+
+- Converts the vial concentration to the original sample volume- or mass-based concentration.
+- IS corrected: conversion factor = 1.
+- Not IS corrected: conversion factor = final volume / sample volume or mass × extra dilution.
+- Sample concentration = blank-adjusted vial concentration × conversion factor.''',
     },
     'sidebar_header':       {'zh': '📋 实验参数',                                'en': '📋 Experiment Parameters'},
     'sample_type':          {'zh': '样本类型',                                   'en': 'Sample Type'},
@@ -345,6 +359,8 @@ with st.expander(t('output_guide_title', L), expanded=True):
         st.markdown(t('output_guide_summary', L))
         st.divider()
         st.markdown(t('output_guide_notes', L))
+        st.divider()
+        st.markdown(t('output_guide_conversion', L))
 
 # ============================================================
 # 侧边栏
