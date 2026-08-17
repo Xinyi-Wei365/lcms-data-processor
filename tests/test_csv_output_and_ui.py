@@ -28,7 +28,7 @@ class CsvOutputAndUiTests(unittest.TestCase):
     def test_top_output_guide_documents_all_sheets_and_matches_current_formulas(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn("with st.expander(t('output_guide_title', L), expanded=True):", source)
+        self.assertIn("with st.expander(t('output_guide_title', L), expanded=False):", source)
         self.assertIn("'zh': '📘 输出表及计算方法（可收起）'", source)
         self.assertIn("guide_left, guide_right = st.columns(2)", source)
         for marker in (
@@ -36,22 +36,23 @@ class CsvOutputAndUiTests(unittest.TestCase):
             '④ 最终计算浓度', '⑤ 描述性统计', '⑥ 计算说明',
         ):
             self.assertIn(marker, source)
-        self.assertIn('回收率（%）= MS实测浓度 ÷ 对应MS理论加标浓度 × 100%', source)
-        self.assertIn('平均回收率 = 有效回收率的算术平均值', source)
-        self.assertIn('SE = SD ÷ √有效回收率数量', source)
-        self.assertIn('瓶内MDL = Blank平均值 + t(0.99，n−1) × Blank标准差', source)
-        self.assertIn('瓶内MDL = 3 × 标曲浓度C ÷ S/N', source)
-        self.assertIn('1/2样本MDL = 瓶内MDL ÷ 2 × 换算因子', source)
-        self.assertIn('原始瓶内浓度 ≥ 瓶内MDL', source)
-        self.assertIn('最终浓度 =（瓶内实测浓度 − Blank平均值）× 换算因子', source)
+        self.assertIn('目标物回收率 = 对应MS实测浓度 ÷ 该目标物对应MS理论基质加标浓度 × 100%', source)
+        self.assertIn('ROUND(AVERAGE(回收率范围),0)', source)
+        self.assertIn('ROUND(SD/SQRT(COUNT(回收率范围)),0)', source)
+        self.assertIn('AVERAGE(范围)+TINV(0.02,COUNT(范围)-1)*STDEV(范围)', source)
+        self.assertIn('3 × 标曲浓度C ÷ S/N', source)
+        self.assertIn('瓶内MDL ÷ 2 × 换算因子', source)
+        self.assertIn('COUNT(全部最终浓度样品范围) ÷ COLUMNS(全部样品范围)', source)
+        self.assertIn('仅当DF>50%时计算`AVERAGE(最终浓度范围)`', source)
+        self.assertIn('25TH=Q1，75TH=Q3', source)
         self.assertIn('**换算因子是什么？**', source)
         self.assertIn('用于把进样瓶中的浓度换算为原始样品的体积浓度或质量浓度', source)
         self.assertIn('已经过IS校正：换算因子 = 1', source)
         self.assertIn('未经过IS校正：换算因子 = 最终定容体积 ÷ 取样体积或质量 × 额外稀释倍数', source)
         self.assertIn('样品浓度 = 经Blank处理后的瓶内浓度 × 换算因子', source)
-        self.assertIn('DF（%）= 真实检出样品数 ÷ 有效样品数 × 100%', source)
-        self.assertIn('Blank≠0：MQL =（Blank平均值 + 10 × Blank标准差）× 换算因子', source)
-        self.assertIn('Blank=0：MQL = 10 × 标曲浓度C ÷ S/N × 换算因子', source)
+        self.assertIn('最终浓度表DF小数值×100', source)
+        self.assertIn('(Blank平均值 + 10 × Blank样本标准差) × 换算因子', source)
+        self.assertIn('10 × 标曲浓度C ÷ S/N × 换算因子', source)
         self.assertNotIn('MQL = 3.333333 × MDL', source)
 
     def test_main_interface_omits_redundant_ss_and_is_example_section(self):

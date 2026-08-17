@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-legacy-df-statistics-v22'
+APP_VERSION = '2026.08.17-detailed-calculation-guide-v23'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -85,24 +85,31 @@ T = {
     'output_guide_matrix': {
         'zh': '''**① 基质加标浓度**
 
-- 包含目标物和SS在各MS列中的实测浓度、回收率、平均回收率、SD和SE。
-- 回收率（%）= MS实测浓度 ÷ 对应MS理论加标浓度 × 100%。SS使用用户填写的自身理论基质加标浓度。
-- 平均回收率 = 有效回收率的算术平均值；SD = 有效回收率的样本标准差；SE = SD ÷ √有效回收率数量。
-- 回收率、平均值、SD和SE四舍五入为整数。IS仅记录，不计算回收率。''',
+- **化合物名称**：来源于原始未处理表，并按用户确认的类型、链长和角色排序。
+- **matrix spike_1、matrix spike_2……浓度列**：直接复制原始表相应MS列的仪器实测浓度；MS数量随上传文件自动增减。
+- **Recoveries各MS列**：目标物回收率 = 对应MS实测浓度 ÷ 该目标物对应MS理论基质加标浓度 × 100%；SS回收率 = SS实测浓度 ÷ 用户填写的该SS自身对应MS理论基质加标浓度 × 100%。
+- **average**：有效回收率的算术平均值，Excel为`ROUND(AVERAGE(回收率范围),0)`。
+- **SD**：有效回收率的样本标准差，Excel为`ROUND(STDEV(回收率范围),0)`。
+- **SE**：`SD ÷ √有效回收率数量`，Excel为`ROUND(SD/SQRT(COUNT(回收率范围)),0)`。
+- 回收率、average、SD和SE四舍五入为整数。**IS实测浓度从原始MS列自动提取，仅展示，不计算回收率。**''',
         'en': '''**1. Matrix spike**
 
-- Contains measured MS concentrations, recoveries, mean recovery, SD and SE for targets and SS compounds.
-- Recovery (%) = measured MS concentration / theoretical spike for the corresponding MS × 100%. SS uses its user-entered own theoretical spike.
-- Mean = arithmetic mean of valid recoveries; SD = sample SD; SE = SD / √number of valid recoveries.
-- Recovery statistics are rounded to integers. IS is recorded only and has no recovery calculation.''',
+- **Compound name:** imported from the raw table and ordered by the confirmed type, chain length and role.
+- **matrix spike_1, matrix spike_2... concentration columns:** raw instrument values copied from the matching MS columns. The number of MS columns is detected dynamically.
+- **Recovery columns:** target recovery = measured MS concentration / the target's theoretical spike for that MS × 100%; SS recovery = measured SS concentration / the user-entered theoretical spike for that SS and MS × 100%.
+- **average:** `ROUND(AVERAGE(valid recoveries),0)`.
+- **SD:** sample SD, `ROUND(STDEV(valid recoveries),0)`.
+- **SE:** `SD / √number of valid recoveries`, rounded to an integer.
+- **IS measured concentrations are copied automatically from the raw MS columns and are displayed without recovery calculations.**''',
     },
     'output_guide_blank': {
         'zh': '''**② 空白基质检出限**
 
-- 包含Blank原始值、Blank平均值、瓶内MDL和1/2样本MDL；空单元格不作为0参与计算。
-- Blank≠0：Blank平均值 = 有效Blank值的算术平均值；Blank标准差 = 有效Blank值的样本标准差；瓶内MDL = Blank平均值 + t(0.99，n−1) × Blank标准差。n为有效Blank数量，系统按自由度n−1自动选取单侧99% t值。
-- Blank没有任何非零值，且仅由空单元格和数值0组成：瓶内MDL = 3 × 标曲浓度C ÷ S/N，C和S/N由用户逐化合物填写。
-- 1/2样本MDL = 瓶内MDL ÷ 2 × 换算因子。''',
+- **blank_1、blank_2……**：直接复制原始表Blank列；原始空单元格保持空白，不当作0参与平均值、SD或有效重复数。
+- **procedural blank average**：Blank存在有效非零路径时为`AVERAGE(有效Blank值)`；进入C/S/N路径时固定为0。
+- **瓶内MDL（Blank存在非零值）**：`Blank平均值 + t × Blank样本标准差`。兼容Excel/WPS公式为`AVERAGE(范围)+TINV(0.02,COUNT(范围)-1)*STDEV(范围)`；不除以√n。
+- **瓶内MDL（没有非零Blank且仅为空或0）**：`3 × 标曲浓度C ÷ S/N`，系统只要求这些化合物逐个填写C和S/N。
+- **1/2 MDL**：`瓶内MDL ÷ 2 × 换算因子`，已经是最终样本报告单位，用于有效未检出样品的统计替代。''',
         'en': '''**2. Blank MDL**
 
 - Contains raw blank values, blank mean, vial MDL and half sample-unit MDL. Empty cells are not treated as zero.
@@ -123,32 +130,39 @@ T = {
     'output_guide_final': {
         'zh': '''**④ 最终计算浓度**
 
-- 真实检出判定：原始瓶内浓度 ≥ 瓶内MDL。
-- 检出时：最终浓度 =（瓶内实测浓度 − Blank平均值）× 换算因子。
-- 未检出但原始值有效时：最终浓度 = 1/2样本MDL；原始单元格为空时，最终结果仍为空。
-- 已经过IS校正：换算因子=1；未经过IS校正：换算因子=最终定容体积 ÷ 取样体积或质量 × 额外稀释倍数。
-- 同时给出DF、Mean、Geometric Mean、Median、Min、Max及第5、25、75、95百分位数。''',
+- **BLANK average**：引用空白基质表对应化合物的Blank平均值。
+- **MDL**：`瓶内MDL × 换算因子`，单位为最终样本报告单位。
+- **F1、F2……最终浓度**：原始瓶内值为空则保持空；原始瓶内值≥瓶内MDL时，`(瓶内实测浓度−Blank平均值)×换算因子`；低于瓶内MDL但有有效数值时，填入`1/2样本MDL`。
+- **DF检出率（恢复旧模板）**：`COUNT(全部最终浓度样品范围) ÷ COLUMNS(全部样品范围)`。1/2 MDL替代值和数值0均被COUNT计数；原始空单元格不被COUNT计数，但仍占全部样品列分母。
+- **MEAN**：仅当DF>50%时计算`AVERAGE(最终浓度范围)`，否则显示NC。
+- **Geometric Mean**：仅当DF>50%时计算`GEOMEAN(最终浓度范围)`，否则显示NC；参与值必须均大于0。
+- **MEDIAN / MIN / MAX**：仅当DF>50%时分别计算中位数、最小值和最大值，否则显示NC。
+- **5TH / 25TH / 75TH / 95TH**：仅当DF>50%时分别计算`PERCENTILE(最终浓度范围,0.05/0.25/0.75/0.95)`，否则显示NC；25TH=Q1，75TH=Q3。
+- **换算因子**：已经过IS校正时为1；未经过IS校正时为`最终定容体积 ÷ 取样体积或质量 × 额外稀释倍数`。''',
         'en': '''**4. Final concentration**
 
-- True detection: original vial concentration ≥ vial MDL.
-- Detected: final concentration = (measured vial concentration − blank mean) × conversion factor.
-- Valid non-detect: final concentration = half sample MDL. An originally empty cell remains empty.
-- IS corrected: conversion factor = 1. Not IS corrected: final volume / sample volume or mass × extra dilution.
-- Also reports DF, mean, geometric mean, median, min, max and the 5th, 25th, 75th and 95th percentiles.''',
+- **Blank average:** references the compound's blank mean from the Blank MDL sheet.
+- **MDL:** vial MDL × conversion factor, in the final reporting unit.
+- **F1, F2... final values:** an empty source remains empty; if vial concentration ≥ vial MDL, `(vial concentration − blank mean) × conversion factor`; otherwise the valid non-detect is replaced by half sample MDL.
+- **DF (legacy template):** `COUNT(all final sample results) / COLUMNS(all sample columns)`. Numeric half-MDL substitutes and zero count; missing source cells do not count in the numerator but remain in the denominator.
+- **Mean, geometric mean, median, min, max and percentiles:** calculated only when DF>50%; otherwise shown as NC. The 25th and 75th percentiles are Q1 and Q3.
+- **Conversion factor:** 1 when IS corrected; otherwise final volume / sample volume or mass × extra dilution.''',
     },
     'output_guide_summary': {
         'zh': '''**⑤ 描述性统计**
 
-- 包含名称、链长、DF（%）、Median（Q1–Q3）、MDL和MQL，结果按3位有效数字展示。
-- DF（%）= 真实检出样品数 ÷ 有效样品数 × 100%。有效样品是原始瓶内浓度不为空的样品；1/2 MDL替代值不算真实检出。
-- Median、Q1和Q3使用所有有效最终浓度：真实检出使用计算后的最终浓度，未检出使用1/2样本MDL；原始空单元格不参与统计。Q1和Q3分别为第25和第75百分位数。
-- MDL = 瓶内MDL × 换算因子。
-- Blank≠0：MQL =（Blank平均值 + 10 × Blank标准差）× 换算因子；Blank=0：MQL = 10 × 标曲浓度C ÷ S/N × 换算因子。''',
+- **名称、链长**：来自用户确认后的化合物信息与排序。
+- **DF（%）**：最终浓度表DF小数值×100，并保留3位有效数字；计算基础为`COUNT(有数值最终浓度)/全部样品列数`。
+- **Median（Q1–Q3）**：只有DF>50%才展示；Median为中位数，Q1为第25百分位数，Q3为第75百分位数，格式为`Median (Q1-Q3)`；DF≤50%显示NC。
+- **MDL**：`瓶内MDL × 换算因子`，保留3位有效数字。
+- **MQL（Blank存在非零值）**：`(Blank平均值 + 10 × Blank样本标准差) × 换算因子`。
+- **MQL（C/S/N路径）**：`10 × 标曲浓度C ÷ S/N × 换算因子`。
+- 本表使用与最终浓度表相同的一套Python结果，同时在Excel保留对应公式。''',
         'en': '''**5. Descriptive statistics**
 
 - Contains name, chain length, DF (%), Median (Q1–Q3), MDL and MQL, shown to three significant figures.
-- DF (%) = true detections / valid samples × 100%. A valid sample has a non-empty original vial value; half-MDL substitutions are not true detections.
-- Median, Q1 and Q3 use all valid final values: calculated concentrations for detections and half sample MDL for non-detects. Original empty cells are excluded. Q1 and Q3 are the 25th and 75th percentiles.
+- DF (%) follows the legacy rule: numeric final-result cells / all sample columns × 100%.
+- Median (Q1–Q3) is shown only when DF>50%; Q1 and Q3 are the 25th and 75th percentiles. DF≤50% gives NC.
 - MDL = vial MDL × conversion factor.
 - Non-zero blank: MQL = (blank mean + 10 × blank SD) × conversion factor. Blank zero: MQL = 10 × C / S/N × conversion factor.''',
     },
@@ -156,7 +170,7 @@ T = {
         'zh': '''**⑥ 计算说明**
 
 - 记录本次处理采用的样品类型、取样量、定容体积、IS校正状态、换算因子及主要计算规则。
-- 同时记录Blank=0与Blank≠0的MDL/MQL路径、检出判定、1/2 MDL替代规则，以及IS按MS列的加入浓度记录（如有填写），便于追溯和复核。''',
+- 同时记录Blank两种MDL/MQL路径、最终浓度替代规则、旧模板DF与DF>50%统计门槛，以及从原始MS列提取的IS实测浓度，便于追溯和复核。''',
         'en': '''**6. Calculation notes**
 
 - Records sample type, sample amount, final volume, IS-correction status, conversion factor and the principal calculation rules used for the run.
@@ -355,7 +369,7 @@ st.title(f"🔬 {t('page_title', L)}")
 st.markdown(t('page_subtitle', L))
 st.caption(f'Version: {APP_VERSION}')
 
-with st.expander(t('output_guide_title', L), expanded=True):
+with st.expander(t('output_guide_title', L), expanded=False):
     guide_left, guide_right = st.columns(2)
     with guide_left:
         st.markdown(t('output_guide_matrix', L))

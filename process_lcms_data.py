@@ -1620,17 +1620,11 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
         sty(cc, S['data'])
         cache_formula_value(cfg, ws, cc, analysis['report_mdl'])
 
-        # Final concentration range (P~CX) and hidden detection-status range.
-        # Status is 1 only when the original bottle value exceeds the blank average.
+        # Final concentration range (P onward). DF now follows the old template
+        # directly from this range, so no hidden detection-status columns are needed.
         sl = get_column_letter(sample_start)
         el = get_column_letter(last_sample)
         sr = f'{sl}{row}:{el}{row}'
-        detection_start = last_sample + 1
-        detection_end = detection_start + n_s - 1
-        dsl = get_column_letter(detection_start)
-        del_ = get_column_letter(detection_end)
-        dsr = f'{dsl}{row}:{del_}{row}'
-
         # D: DF 检出率，恢复旧模板规则：有数值结果数 ÷ 全部样品列数。
         cd = ws.cell(row=row, column=4)
         cd.value = f'=COUNT({sr})/COLUMNS({sr})'
@@ -1659,16 +1653,9 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
         # 样品数据列 P~CX
         for i, (_, _, sample_header) in enumerate(sample_cols):
             col = sample_start + i
-            detection_col = detection_start + i
             s3_cl = get_column_letter(2 + i)
 
             if s2r and s3r:
-                ws.cell(row=row, column=detection_col).value = (
-                    f"=IF('{bottle_name}'!{s3_cl}{s3r}=\"\",\"\","
-                    f"IF('{bottle_name}'!{s3_cl}{s3r}>='{blanks_name}'!{ml}{s2r},1,0))"
-                )
-                ws.cell(row=row, column=detection_col).number_format = '0'
-                cache_formula_value(cfg, ws, ws.cell(row=row, column=detection_col), analysis['detections'].get(sample_header))
                 formula = (
                     f"=IF('{bottle_name}'!{s3_cl}{s3r}=\"\",\"\","
                     f"IF('{bottle_name}'!{s3_cl}{s3r}>='{blanks_name}'!{ml}{s2r},"
@@ -1679,7 +1666,6 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
                 ws.cell(row=row, column=col).number_format = '0.000000'
                 cache_formula_value(cfg, ws, ws.cell(row=row, column=col), analysis['sample_values'].get(sample_header))
             sty(ws.cell(row=row, column=col), S['data'])
-            ws.column_dimensions[get_column_letter(detection_col)].hidden = True
         row += 1
 
     ws.row_dimensions[1].height = 19.5
@@ -1774,13 +1760,20 @@ def build_info_sheet(wb, S, cfg):
     rows = [
         [text['notes_title']],
         ['Area', 'Formula/rule', 'Source', 'Note'] if english else ['区域', '公式/规则', '来源', '说明'],
-        ['Matrix spike recovery', 'measured concentration ÷ corresponding compound/MS spike × 100', 'Imported MS columns', 'Target and SS only; IS does not have recovery.' if english else '目标物和SS才计算；IS不计算回收率。'],
-        ['MDL (blank not zero)', 'mean(blank)+t(0.99,n_blank-1)×SD(blank)', 'Procedural blank replicates', 't uses the actual valid blank count.' if english else 't 值根据有效 blank 实际重复数计算。'],
+        ['Matrix spike measured values', 'Copy the matching raw MS concentration', 'Original MS columns', 'MS columns are detected dynamically.' if english else 'matrix spike_1、2……直接复制原始MS实测浓度，列数随文件自动变化。'],
+        ['Target/SS recovery', 'measured MS ÷ corresponding theoretical MS spike × 100%', 'Raw MS + user spike settings', 'SS uses its own compound-by-MS theoretical spike; IS has no recovery.' if english else '目标物使用对应MS理论加标浓度；SS使用用户填写的自身逐MS理论加标浓度；IS不计算回收率。'],
+        ['Recovery average / SD / SE', 'ROUND(AVERAGE,0); ROUND(STDEV,0); ROUND(SD/SQRT(COUNT),0)', 'Valid recovery cells', 'All three statistics use only numeric recovery cells.' if english else 'average为算术平均；SD为样本标准差；SE=SD÷√有效回收率数量，均四舍五入取整。'],
+        ['Blank average', 'AVERAGE(valid blank values); C/S/N path = 0', 'Original blank columns', 'Empty cells are excluded and are not converted to zero.' if english else 'Blank存在非零值时取有效数值平均；C/S/N路径按0；原始空单元格不作为0。'],
+        ['MDL (blank not zero)', 'AVERAGE(blank)+TINV(0.02,n-1)×STDEV(blank)', 'Valid procedural blank replicates', 'Equivalent to one-sided 99% t; no division by SQRT(n).' if english else 'TINV(0.02,n−1)等价于单侧99% t值；使用Blank样本标准差，不除以√n。'],
         ['MDL (blank zero)', '3 × calibration concentration ÷ S/N', 'User-entered calibration point and S/N', 'Blank cells are missing, not zero.' if english else '空单元格为缺失值，不等于0。'],
-        ['MQL', 'mean(blank)+10×SD(blank); blank zero: 10×calibration concentration÷S/N', 'Same blank inputs as MDL', 'Reported in final sample units.' if english else '按最终样本单位报告。'],
-        ['Final concentration', 'If vial concentration ≥ vial MDL: (vial concentration - blank mean) × conversion factor; otherwise 1/2 final MDL', 'Vial concentration + blank/MDL sheet', 'Original blank cells remain blank.' if english else '原始空白单元格保持空白。'],
+        ['Half sample MDL', 'vial MDL ÷ 2 × conversion factor', 'Blank MDL + conversion factor', 'Used for valid non-detect substitution and already in the final reporting unit.' if english else '用于有效未检出样品替代，结果已经是最终样本报告单位。'],
+        ['Final sample concentration', 'empty→empty; vial≥MDL→(vial-blank mean)×factor; otherwise half sample MDL', 'Vial concentration + Blank MDL', 'The source vial value is compared with vial MDL before conversion.' if english else '原始空值保持空；瓶内值≥瓶内MDL时扣Blank并换算；低于MDL但有值时使用1/2样本MDL。'],
         ['DF', 'COUNT(final sample results) ÷ COLUMNS(all sample columns)', 'Final concentration sample range', 'Numeric half-MDL substitutes count; missing source cells remain in the denominator.' if english else '有数值最终浓度数÷全部样品列数；1/2 MDL替代值计数，原始空单元格仍占分母。'],
-        ['Descriptive statistics', 'Only calculated when DF>50%; otherwise NC', 'Final concentration sample range', 'Mean, geometric mean, median, min, max and percentiles follow the old template gate.' if english else 'MEAN、几何平均、MEDIAN、MIN、MAX及百分位数均恢复旧模板DF>50%门槛。'],
+        ['MEAN / Geometric Mean', 'IF(DF>50%,AVERAGE/GEOMEAN(final range),"NC")', 'Final concentration sample range', 'GEOMEAN requires all participating numeric results to be positive.' if english else 'DF严格大于50%才计算；MEAN为算术平均，Geometric Mean要求参与数值均大于0。'],
+        ['MEDIAN / MIN / MAX', 'IF(DF>50%,MEDIAN/MIN/MAX(final range),"NC")', 'Final concentration sample range', 'DF=50% still returns NC.' if english else 'DF严格大于50%才计算；DF等于50%仍显示NC。'],
+        ['5TH / 25TH / 75TH / 95TH', 'IF(DF>50%,PERCENTILE(final range,p),"NC")', 'Final concentration sample range', 'p=0.05, 0.25, 0.75 and 0.95; 25TH=Q1 and 75TH=Q3.' if english else '分别使用0.05、0.25、0.75、0.95；25TH=Q1，75TH=Q3；DF≤50%显示NC。'],
+        ['Descriptive summary', 'DF×100; Median(Q1-Q3) only if DF>50%; MDL/MQL to 3 significant figures', 'Shared Python results + retained formulas', 'Online preview and downloaded workbook use the same numeric results.' if english else 'DF转百分数；DF>50%才展示Median(Q1-Q3)；MDL/MQL保留3位有效数字；网页与下载使用同一结果。'],
+        ['MQL', '(blank mean+10×STDEV(blank))×factor; C/S/N path: 10×C÷S/N×factor', 'Same blank inputs as MDL', 'Reported in final sample units.' if english else 'Blank非零路径为平均值+10倍样本SD；C/S/N路径为10×C÷S/N；最后乘换算因子。'],
         ['IS measured concentrations', 'Copied per IS and per MS cell; no recovery calculation', 'Original unprocessed MS columns', 'IS correction is controlled only by the IS-corrected setting.' if english else 'IS实测浓度由原始未处理表对应MS列自动提取；是否IS校正仍只由界面“数据是否经过IS校正”控制。'],
         ['Parameters', f'sample={cfg["sample_type"]}; sample volume={cfg["sample_volume_ml"]} mL; final volume={cfg["final_volume_ml"]} mL; conversion factor={cfg["conversion_factor"]}', '', ''],
     ]

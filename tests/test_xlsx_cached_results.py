@@ -140,6 +140,7 @@ class XlsxCachedResultsTests(unittest.TestCase):
         final_name = next(name for name in formula_wb.sheetnames if name.startswith('Final. conc'))
         final_formula = formula_wb[final_name]
         final_value = value_wb[final_name]
+        self.assertEqual(final_formula.max_column, 18)
         for column in range(5, 14):
             self.assertIn('IF(D4>50%', final_formula.cell(4, column).value)
             self.assertEqual(final_value.cell(4, column).value, 'NC')

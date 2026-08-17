@@ -229,7 +229,7 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual([matrix_sheet.cell(ss_row, c).value for c in (6, 7)], [200, 200])
         info = workbook['计算说明']
         rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
-        self.assertTrue(any(row[0] == 'Matrix spike recovery' for row in rows))
+        self.assertTrue(any(row[0] == 'Target/SS recovery' for row in rows))
 
     def test_compound_by_ms_concentrations_apply_to_target_ss_and_is_records(self):
         raw = (
