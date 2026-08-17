@@ -95,7 +95,7 @@ class DynamicRulesTests(unittest.TestCase):
 
     def test_mdl_formula_keeps_blank_standard_deviation_rule_by_default(self):
         formula = processor.mdl_formula('C8-BAC', 'B4:G4', {})
-        self.assertEqual(formula, '=AVERAGE(B4:G4)+T.INV(0.99,COUNT(B4:G4)-1)*STDEV.S(B4:G4)')
+        self.assertEqual(formula, '=AVERAGE(B4:G4)+TINV(0.02,COUNT(B4:G4)-1)*STDEV(B4:G4)')
 
     def test_selected_ss_concentration_is_resolved_by_exact_name(self):
         cfg = {'ss_spike_concentrations': {'Surrogate-X': 2.0}}

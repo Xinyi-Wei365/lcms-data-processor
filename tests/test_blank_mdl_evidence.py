@@ -63,7 +63,7 @@ class BlankMdlEvidenceTests(unittest.TestCase):
 
         self.assertEqual(
             formula,
-            '=AVERAGE(B5:F5)+T.INV(0.99,COUNT(B5:F5)-1)*STDEV.S(B5:F5)',
+            '=AVERAGE(B5:F5)+TINV(0.02,COUNT(B5:F5)-1)*STDEV(B5:F5)',
         )
 
 

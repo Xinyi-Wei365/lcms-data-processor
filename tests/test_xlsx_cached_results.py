@@ -133,6 +133,19 @@ class XlsxCachedResultsTests(unittest.TestCase):
         self.assertAlmostEqual(value_wb[name].cell(5, mdl_col).value, 0.3)
         self.assertAlmostEqual(value_wb[name].cell(5, half_col).value, 0.15)
 
+    def test_mdl_formulas_use_legacy_excel_and_wps_compatible_functions(self):
+        output = self.make_output()
+        workbook = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        blank_name = next(name for name in workbook.sheetnames if name.startswith('Blanks_MDL'))
+        worksheet = workbook[blank_name]
+        mdl_col = next(c for c in range(1, worksheet.max_column + 1)
+                       if worksheet.cell(2, c).value == 'MDL')
+        formula = worksheet.cell(5, mdl_col).value
+        self.assertIn('TINV(0.02,', formula)
+        self.assertIn('STDEV(', formula)
+        self.assertNotIn('T.INV', formula)
+        self.assertNotIn('STDEV.S', formula)
+
 
 if __name__ == '__main__':
     unittest.main()

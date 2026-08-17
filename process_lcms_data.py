@@ -25,7 +25,8 @@ import pandas as pd
 
 
 # One-sided 99 % Student-t critical values.  The values are used only for the
-# numeric web/CSV preview; the XLSX output uses Excel's exact T.INV formula.
+# numeric web/CSV preview; XLSX uses legacy-compatible TINV/STDEV formulas so
+# both Microsoft Excel and WPS can recalculate without #NAME? errors.
 T99_ONE_SIDED = {
     1: 31.821, 2: 6.965, 3: 4.541, 4: 3.747, 5: 3.365, 6: 3.143,
     7: 2.998, 8: 2.896, 9: 2.821, 10: 2.764, 11: 2.718, 12: 2.681,
@@ -658,7 +659,8 @@ def mdl_formula(name, blank_range, cfg):
         if signal_to_noise is None or signal_to_noise <= 0:
             raise ValueError(f'{name}: signal-to-noise must be positive for S/N MDL.')
         return f'=3*{concentration}/{signal_to_noise}'
-    return f'=AVERAGE({blank_range})+T.INV(0.99,COUNT({blank_range})-1)*STDEV.S({blank_range})'
+    # TINV(0.02, df) is the legacy two-tailed equivalent of T.INV(0.99, df).
+    return f'=AVERAGE({blank_range})+TINV(0.02,COUNT({blank_range})-1)*STDEV({blank_range})'
 
 
 def mdl_report_formula(name, bottle_ref, cfg):
@@ -685,7 +687,7 @@ def mql_formula(name, blank_range, cfg):
         if concentration is None or concentration <= 0 or signal_to_noise is None or signal_to_noise <= 0:
             raise ValueError(f'{name}: calibration concentration and S/N must be positive.')
         return f'=10*{concentration}/{signal_to_noise}'
-    return f'=AVERAGE({blank_range})+10*STDEV.S({blank_range})'
+    return f'=AVERAGE({blank_range})+10*STDEV({blank_range})'
 
 
 def mql_report_formula(name, bottle_ref, blank_range, cfg):
