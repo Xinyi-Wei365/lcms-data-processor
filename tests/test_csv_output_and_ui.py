@@ -189,8 +189,10 @@ class CsvOutputAndUiTests(unittest.TestCase):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
         self.assertIn('每行填写一个替代物：名称，MS1加标浓度，MS2加标浓度……', source)
-        self.assertIn('示例：\\nd9-C10-ATMAC, 4, 4\\nd7-C12-BAC, 4, 4', source)
-        self.assertIn('Example:\\nd9-C10-ATMAC, 4, 4\\nd7-C12-BAC, 4, 4', source)
+        self.assertIn("st.caption(t('custom_ss_example_label', L))", source)
+        self.assertIn("st.code(t('custom_ss_example', L), language=None)", source)
+        self.assertIn("'custom_ss_example':", source)
+        self.assertIn('d9-C10-ATMAC, 4, 4\\nd7-C12-BAC, 4, 4', source)
         self.assertIn('名称须与原始表完全一致', source)
         self.assertIn('不是原始表中的MS实测浓度', source)
         self.assertIn('实际有几个MS，就填写几个浓度', source)

@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-ss-two-example-v14'
+APP_VERSION = '2026.08.17-ss-copyable-example-v15'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -227,7 +227,9 @@ T = {
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
     'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
-    'custom_ss_help':       {'zh': '每行填写一个替代物：名称，MS1加标浓度，MS2加标浓度……。\n\n示例：\nd9-C10-ATMAC, 4, 4\nd7-C12-BAC, 4, 4\n\n名称须与原始表完全一致；数值依次对应实际MS列，是该替代物自身的理论基质加标浓度，不是原始表中的MS实测浓度。实际有几个MS，就填写几个浓度。支持中英文逗号、分号或Tab分隔。回收率 = 原始表SS实测浓度 ÷ 填写的SS基质加标浓度 × 100%。', 'en': 'Enter one surrogate per line: name, MS1 spike concentration, MS2 spike concentration, etc.\n\nExample:\nd9-C10-ATMAC, 4, 4\nd7-C12-BAC, 4, 4\n\nThe name must exactly match the raw file. Values correspond to the actual MS columns and are the surrogate’s own theoretical matrix-spike concentrations, not measured MS concentrations from the raw file. Enter one concentration for every actual MS column. English/Chinese commas, semicolons, and Tab are supported. Recovery = measured SS concentration in the raw file / entered SS matrix-spike concentration x 100%.'},
+    'custom_ss_help':       {'zh': '每行填写一个替代物：名称，MS1加标浓度，MS2加标浓度……。名称须与原始表完全一致；数值依次对应实际MS列，是该替代物自身的理论基质加标浓度，不是原始表中的MS实测浓度。实际有几个MS，就填写几个浓度。支持中英文逗号、分号或Tab分隔。回收率 = 原始表SS实测浓度 ÷ 填写的SS基质加标浓度 × 100%。', 'en': 'Enter one surrogate per line: name, MS1 spike concentration, MS2 spike concentration, etc. The name must exactly match the raw file. Values correspond to the actual MS columns and are the surrogate’s own theoretical matrix-spike concentrations, not measured MS concentrations from the raw file. Enter one concentration for every actual MS column. English/Chinese commas, semicolons, and Tab are supported. Recovery = measured SS concentration in the raw file / entered SS matrix-spike concentration x 100%.'},
+    'custom_ss_example_label': {'zh': '可复制示例（两个MS，每个替代物单独一行）：', 'en': 'Copyable example (two MS columns; one surrogate per line):'},
+    'custom_ss_example': {'zh': 'd9-C10-ATMAC, 4, 4\nd7-C12-BAC, 4, 4', 'en': 'd9-C10-ATMAC, 4, 4\nd7-C12-BAC, 4, 4'},
     'custom_ss_placeholder': {'zh': 'd9-C10-ATMAC, 4, 4\nd7-C12-BAC, 4, 4',             'en': 'd9-C10-ATMAC, 4, 4\nd7-C12-BAC, 4, 4'},
     'custom_is':            {'zh': '自定义 IS 内标（可选）',                         'en': 'Custom IS internal standards (optional)'},
     'custom_is_help':       {'zh': '这里只输入IS化合物名称，不输入浓度。多个名称可使用：英文逗号“,”、中文逗号“，”、英文分号“;”、中文分号“；”、Tab或换行分隔。系统会与上传文件中的化合物自动匹配并识别为IS；IS不计算回收率。是否使用IS校正仍由上方选项决定。',
@@ -415,6 +417,8 @@ with st.sidebar:
 
     st.subheader(t('custom_ss', L))
     st.caption(t('custom_ss_help', L))
+    st.caption(t('custom_ss_example_label', L))
+    st.code(t('custom_ss_example', L), language=None)
     custom_ss_text = st.text_area(
         t('custom_ss', L),
         value='',
