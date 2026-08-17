@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-process-blockers-v16'
+APP_VERSION = '2026.08.17-specific-mdl-blockers-v17'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -288,7 +288,10 @@ T = {
     'process_blocked_header': {'zh': '“开始处理”尚未启用，请先完成以下项目：', 'en': 'Start Processing is not enabled. Complete the following items:'},
     'process_blocked_file': {'zh': '上传原始文件或加载 Demo 数据。', 'en': 'Upload a source file or load the Demo.'},
     'process_blocked_layout': {'zh': '修正文件格式检查中显示的错误，确保能识别 BLANK、MS、样品列和目标物。', 'en': 'Resolve the input-format errors so BLANK, MS, sample columns, and targets can be identified.'},
-    'process_blocked_mdl': {'zh': '完成 Blank/MDL 设置：如果某个化合物的 Blank 全为0，请填写该化合物的标曲浓度 C 和 S/N。', 'en': 'Complete Blank/MDL settings. If all blanks are zero for a compound, enter its calibration concentration C and S/N.'},
+    'process_blocked_mdl_zero': {'zh': 'Blank全部为0，请在上方填写标曲浓度C和S/N。', 'en': 'All blanks are zero; enter calibration concentration C and S/N above.'},
+    'process_blocked_mdl_missing': {'zh': '没有有效Blank结果，无法计算MDL。', 'en': 'No valid blank results were found, so MDL cannot be calculated.'},
+    'process_blocked_mdl_insufficient': {'zh': '有效Blank少于2个，无法计算标准差和MDL。', 'en': 'Fewer than two valid blanks are available, so SD and MDL cannot be calculated.'},
+    'process_blocked_mdl_incomplete': {'zh': 'Blank列存在缺失，且现有有效值全部为0；请补齐Blank数据后重新上传。', 'en': 'Blank cells are missing and all remaining valid values are zero; complete the blank data and upload again.'},
     'process_blocked_ss': {'zh': '完成 SS 理论基质加标浓度：每个替代物必须按实际 MS 列数填写相同数量的浓度。', 'en': 'Complete SS theoretical matrix-spike concentrations. Each surrogate needs one value for every actual MS column.'},
     'processing':           {'zh': '正在处理数据...',                              'en': 'Processing data...'},
     'success':              {'zh': '✅ 处理完成！',                                'en': '✅ Processing Complete!'},
@@ -488,6 +491,7 @@ ss_concentrations = {}
 matrix_spike_concentrations = {}
 compound_metadata = {}
 mdl_overrides = {}
+blank_evidence = {}
 mql_factor = 3.333333
 layout_is_ready = False
 mdl_evidence_ready = False
@@ -721,13 +725,25 @@ if file_bytes:
 # ============================================================
 st.divider()
 process_blockers = []
+mdl_blocker_messages = []
 if file_bytes is None:
     process_blockers.append(t('process_blocked_file', L))
 else:
     if not layout_is_ready:
         process_blockers.append(t('process_blocked_layout', L))
     if not mdl_evidence_ready:
-        process_blockers.append(t('process_blocked_mdl', L))
+        mdl_blocker_keys = {
+            'blank_zero': 'process_blocked_mdl_zero',
+            'missing': 'process_blocked_mdl_missing',
+            'insufficient': 'process_blocked_mdl_insufficient',
+            'incomplete': 'process_blocked_mdl_incomplete',
+        }
+        for name, evidence in blank_evidence.items():
+            if evidence['ready']:
+                continue
+            detail = t(mdl_blocker_keys.get(evidence['status'], 'process_blocked_mdl_missing'), L)
+            mdl_blocker_messages.append(f'{name}：{detail}')
+        process_blockers.extend(mdl_blocker_messages)
     if not ss_spike_ready:
         process_blockers.append(t('process_blocked_ss', L))
 

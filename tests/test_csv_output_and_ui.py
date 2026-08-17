@@ -207,11 +207,23 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn("'process_blocked_header':", source)
         self.assertIn("'process_blocked_file':", source)
         self.assertIn("'process_blocked_layout':", source)
-        self.assertIn("'process_blocked_mdl':", source)
+        self.assertIn("'process_blocked_mdl_zero':", source)
         self.assertIn("'process_blocked_ss':", source)
         self.assertIn('process_blockers = []', source)
         self.assertIn("st.warning(t('process_blocked_header', L))", source)
         self.assertIn('for blocker in process_blockers:', source)
+
+    def test_mdl_blocker_message_reports_compound_specific_reason(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn('mdl_blocker_messages = []', source)
+        self.assertIn("'process_blocked_mdl_zero':", source)
+        self.assertIn("'process_blocked_mdl_missing':", source)
+        self.assertIn("'process_blocked_mdl_insufficient':", source)
+        self.assertIn("'process_blocked_mdl_incomplete':", source)
+        self.assertIn("mdl_blocker_messages.append(f'{name}：{detail}')", source)
+        self.assertIn('process_blockers.extend(mdl_blocker_messages)', source)
+        self.assertNotIn("process_blockers.append(t('process_blocked_mdl', L))", source)
 
     def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
