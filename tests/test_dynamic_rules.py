@@ -260,7 +260,7 @@ class DynamicRulesTests(unittest.TestCase):
         self.assertEqual([matrix_sheet.cell(ss_row, c).value for c in (7, 8, 9)], [100, 100, 100])
         info = workbook['计算说明']
         rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
-        header_row = next(row for row in rows if row[:4] == ['IS additions, ppb  内标加入浓度（仅记录）', 'MS1', 'MS2', 'MS3'])
+        header_row = next(row for row in rows if row[:4] == ['IS measured concentrations, ppb  IS实测浓度（来源于原始MS列）', 'MS1', 'MS2', 'MS3'])
         value_index = rows.index(header_row) + 1
         self.assertEqual(rows[value_index][:4], ['My Internal Standard', 4, 8, 2])
 

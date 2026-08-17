@@ -101,7 +101,7 @@ class CsvOutputAndUiTests(unittest.TestCase):
 
         text = output.decode('utf-8-sig')
         self.assertIn('名称,链长,DF (%),Median (Q1-Q3),MDL,MQL', text)
-        self.assertIn('IS 加入浓度记录（仅记录）,MS1,MS2,是否经过 IS 校正', text)
+        self.assertIn('IS 实测浓度（来源于原始MS列）,MS1,MS2,是否经过 IS 校正', text)
         self.assertIn('My Internal Standard,4.0,8.0,否', text)
 
     def test_language_labels_are_available_in_both_languages(self):
@@ -302,9 +302,9 @@ class CsvOutputAndUiTests(unittest.TestCase):
         workbook = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
         info = workbook['计算说明']
         rows = [[info.cell(r, c).value for c in range(1, 5)] for r in range(1, info.max_row + 1)]
-        marker = ['IS additions, ppb  内标加入浓度（仅记录）', 'MS1', '是否IS校正', None]
+        marker = ['IS measured concentrations, ppb  IS实测浓度（来源于原始MS列）', 'MS1', '是否IS校正', None]
         self.assertIn(marker, rows)
-        self.assertEqual(rows[rows.index(marker) + 1], ['My Internal Standard', None, 'yes', None])
+        self.assertEqual(rows[rows.index(marker) + 1], ['My Internal Standard', 4, 'yes', None])
 
 
 if __name__ == '__main__':

@@ -72,7 +72,7 @@ class FinalWorkflowTests(unittest.TestCase):
         is_row = next(row for row in range(1, matrix.max_row + 1) if matrix.cell(row, 1).value == 'My Internal Standard')
         self.assertEqual(matrix.cell(is_row, 1).value, 'My Internal Standard')
         self.assertEqual(matrix.cell(is_row, 6).value, None)
-        self.assertTrue(any(str(matrix.cell(row, 1).value or '').startswith('IS additions')
+        self.assertTrue(any(str(matrix.cell(row, 1).value or '').startswith('IS measured')
                             for row in range(1, matrix.max_row + 1)))
         self.assertNotIn('统计计算结果', wb.sheetnames)
 
