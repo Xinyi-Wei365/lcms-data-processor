@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-ss-copyable-example-v15'
+APP_VERSION = '2026.08.17-process-blockers-v16'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -285,6 +285,11 @@ T = {
     'sample_cols':          {'zh': '样品列',                                      'en': 'Sample Columns'},
     'preview_warn':         {'zh': '预览时请注意',                                 'en': 'Preview Warning'},
     'process_btn':          {'zh': '🚀 开始处理',                                 'en': '🚀 Start Processing'},
+    'process_blocked_header': {'zh': '“开始处理”尚未启用，请先完成以下项目：', 'en': 'Start Processing is not enabled. Complete the following items:'},
+    'process_blocked_file': {'zh': '上传原始文件或加载 Demo 数据。', 'en': 'Upload a source file or load the Demo.'},
+    'process_blocked_layout': {'zh': '修正文件格式检查中显示的错误，确保能识别 BLANK、MS、样品列和目标物。', 'en': 'Resolve the input-format errors so BLANK, MS, sample columns, and targets can be identified.'},
+    'process_blocked_mdl': {'zh': '完成 Blank/MDL 设置：如果某个化合物的 Blank 全为0，请填写该化合物的标曲浓度 C 和 S/N。', 'en': 'Complete Blank/MDL settings. If all blanks are zero for a compound, enter its calibration concentration C and S/N.'},
+    'process_blocked_ss': {'zh': '完成 SS 理论基质加标浓度：每个替代物必须按实际 MS 列数填写相同数量的浓度。', 'en': 'Complete SS theoretical matrix-spike concentrations. Each surrogate needs one value for every actual MS column.'},
     'processing':           {'zh': '正在处理数据...',                              'en': 'Processing data...'},
     'success':              {'zh': '✅ 处理完成！',                                'en': '✅ Processing Complete!'},
     'result_preview':       {'zh': '📋 处理结果预览',                             'en': '📋 Result Preview'},
@@ -715,9 +720,25 @@ if file_bytes:
 # 处理按钮
 # ============================================================
 st.divider()
+process_blockers = []
+if file_bytes is None:
+    process_blockers.append(t('process_blocked_file', L))
+else:
+    if not layout_is_ready:
+        process_blockers.append(t('process_blocked_layout', L))
+    if not mdl_evidence_ready:
+        process_blockers.append(t('process_blocked_mdl', L))
+    if not ss_spike_ready:
+        process_blockers.append(t('process_blocked_ss', L))
+
+if process_blockers:
+    st.warning(t('process_blocked_header', L))
+    for blocker in process_blockers:
+        st.markdown(f'- {blocker}')
+
 process_btn = st.button(
     t('process_btn', L), type="primary",
-    disabled=(file_bytes is None or not layout_is_ready or not mdl_evidence_ready or not ss_spike_ready),
+    disabled=bool(process_blockers),
     width='stretch',
 )
 

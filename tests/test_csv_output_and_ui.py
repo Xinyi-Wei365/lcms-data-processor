@@ -201,6 +201,18 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertNotIn("st.info(t('ss_input_example_body', L))", source)
         self.assertNotIn("st.markdown(f\"**{t('ss_input_example_title', L)}**\")", source)
 
+    def test_disabled_process_button_explains_every_unfinished_requirement(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("'process_blocked_header':", source)
+        self.assertIn("'process_blocked_file':", source)
+        self.assertIn("'process_blocked_layout':", source)
+        self.assertIn("'process_blocked_mdl':", source)
+        self.assertIn("'process_blocked_ss':", source)
+        self.assertIn('process_blockers = []', source)
+        self.assertIn("st.warning(t('process_blocked_header', L))", source)
+        self.assertIn('for blocker in process_blockers:', source)
+
     def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
