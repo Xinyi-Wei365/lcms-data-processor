@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-excel-wps-formulas-v21'
+APP_VERSION = '2026.08.17-legacy-df-statistics-v22'
 
 try:
     validate_input_layout = processor.validate_input_layout

@@ -16,13 +16,13 @@ class FinalWorkflowTests(unittest.TestCase):
         )
         self.assertAlmostEqual(mdl, 0.2256625, places=6)
 
-    def test_df_uses_bottle_mdl_not_blank_average(self):
+    def test_df_uses_old_template_numeric_result_count(self):
         raw_data = {'C8-BAC': {'B': 0.19, 'C': 0.20, 'D': 0.21, 'E': 0.25, 'F': 0.60, 'G': None}}
         blanks = [(2, 'B', 'BLANK1'), (3, 'C', 'BLANK2'), (4, 'D', 'BLANK3')]
         samples = [(5, 'E', 'F1'), (6, 'F', 'F2'), (7, 'G', 'F3')]
         cfg = {'target_compounds': ['C8-BAC'], 'conversion_factor': 1}
         rows = processor.compute_preview_summary(raw_data, blanks, samples, cfg)
-        self.assertAlmostEqual(rows[0]['DF (%)'], 50.0)
+        self.assertAlmostEqual(rows[0]['DF (%)'], 66.7)
 
     def test_metadata_override_controls_type_chain_role_and_order(self):
         metadata = {

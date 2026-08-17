@@ -75,7 +75,7 @@ class XlsxCachedResultsTests(unittest.TestCase):
         self.assertAlmostEqual(final_value['P4'].value, 0.5)
         self.assertAlmostEqual(final_value['Q4'].value, 1.0)
         self.assertAlmostEqual(final_value['R4'].value, 2.0)
-        self.assertAlmostEqual(final_value['D4'].value, 2 / 3)
+        self.assertAlmostEqual(final_value['D4'].value, 1.0)
         self.assertAlmostEqual(final_value['E4'].value, (0.5 + 1 + 2) / 3)
 
     def test_online_preview_and_cached_excel_use_the_same_python_results(self):
@@ -104,6 +104,48 @@ class XlsxCachedResultsTests(unittest.TestCase):
         self.assertEqual(summary['Median (Q1-Q3)'], descriptive['D4'].value)
         self.assertEqual(summary['MDL'], descriptive['E4'].value)
         self.assertEqual(summary['MQL'], descriptive['F4'].value)
+
+    def test_df_uses_old_template_numeric_count_over_all_sample_columns(self):
+        raw = (
+            'Name,Ion,BLANK1,BLANK2,MS1,F1,F2,F3\n'
+            'C8-BAC,248>91,1,1,10,0.5,2,\n'
+        ).encode('utf-8')
+        cfg = {
+            'input_bytes': raw, 'input_file': '', 'output_file': 'old-df.xlsx',
+            'target_compounds': ['C8-BAC'], 'is_compounds': [], 'ss_compounds': [],
+            'conversion_factor': 1,
+            'matrix_spike_concentrations': {'C8-BAC': {'MS1': 10}},
+        }
+        output, _ = processor.process(cfg, return_bytes=True)
+        formula_wb = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        value_wb = openpyxl.load_workbook(io.BytesIO(output), data_only=True)
+        final_name = next(name for name in formula_wb.sheetnames if name.startswith('Final. conc'))
+        self.assertEqual(formula_wb[final_name]['D4'].value, '=COUNT(P4:R4)/COLUMNS(P4:R4)')
+        self.assertAlmostEqual(value_wb[final_name]['D4'].value, 2 / 3)
+
+    def test_old_template_statistics_require_df_above_fifty_percent(self):
+        raw = (
+            'Name,Ion,BLANK1,BLANK2,MS1,F1,F2,F3\n'
+            'C8-BAC,248>91,1,1,10,2,,\n'
+        ).encode('utf-8')
+        cfg = {
+            'input_bytes': raw, 'input_file': '', 'output_file': 'old-stat-threshold.xlsx',
+            'target_compounds': ['C8-BAC'], 'is_compounds': [], 'ss_compounds': [],
+            'conversion_factor': 1,
+            'matrix_spike_concentrations': {'C8-BAC': {'MS1': 10}},
+        }
+        output, _ = processor.process(cfg, return_bytes=True)
+        formula_wb = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
+        value_wb = openpyxl.load_workbook(io.BytesIO(output), data_only=True)
+        final_name = next(name for name in formula_wb.sheetnames if name.startswith('Final. conc'))
+        final_formula = formula_wb[final_name]
+        final_value = value_wb[final_name]
+        for column in range(5, 14):
+            self.assertIn('IF(D4>50%', final_formula.cell(4, column).value)
+            self.assertEqual(final_value.cell(4, column).value, 'NC')
+        descriptive_name = next(name for name in formula_wb.sheetnames
+                                if name.startswith('Descriptive') or name == '描述性统计')
+        self.assertEqual(value_wb[descriptive_name]['D4'].value, 'NC')
 
     def test_zero_or_empty_blank_path_caches_zero_average_and_snr_results(self):
         raw = (

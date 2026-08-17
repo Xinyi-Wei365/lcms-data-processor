@@ -45,7 +45,7 @@ WORKBOOK_TEXT = {
         'is_additions': 'IS measured concentrations, ppb  IS实测浓度（来源于原始MS列）',
         'ss_recoveries': 'SS recoveries, %  替代物回收率',
         'summary_title': '描述性统计（最终结果，保留3位有效数字）',
-        'summary_note': 'DF 为原始瓶内浓度≥瓶内MDL的真实检出率；Median(Q1-Q3)基于所有有效最终浓度；MDL/MQL保留公式。',
+        'summary_note': 'DF=有数值最终浓度数÷全部样品列数；仅DF>50%时展示Median(Q1-Q3)；MDL/MQL保留公式。',
         'summary_headers': ['名称', '链长', 'DF (%)', 'Median (Q1-Q3)', 'MDL', 'MQL'],
         'blank_note': '数值空白单元格不参与统计；有效但未检出样品按 1/2 MDL 替代。',
         'notes_title': 'LC-MS/MS 数据处理说明',
@@ -56,7 +56,7 @@ WORKBOOK_TEXT = {
         'compound': 'Compound name', 'group': 'Group', 'sample_volume': 'Sample volume (mL)',
         'is_additions': 'IS measured concentrations, ppb (from raw MS columns)', 'ss_recoveries': 'SS recoveries, %',
         'summary_title': 'Descriptive statistics (final results, 3 significant figures)',
-        'summary_note': 'DF is the true detection rate (original vial concentration ≥ vial MDL); Median(Q1-Q3) uses all valid final concentrations; MDL/MQL formulas are retained.',
+        'summary_note': 'DF=numeric final-result cells÷all sample columns; Median(Q1-Q3) is shown only when DF>50%; MDL/MQL formulas are retained.',
         'summary_headers': ['Name', 'Chain length', 'DF (%)', 'Median (Q1-Q3)', 'MDL', 'MQL'],
         'blank_note': 'Blank cells are excluded; valid non-detects are replaced with 1/2 MDL.',
         'notes_title': 'LC-MS/MS calculation notes',
@@ -759,6 +759,7 @@ def compute_analysis_results(raw_data, blank_cols, sample_cols, cfg):
         detections = {}
         final_values = []
         valid_samples = 0
+        numeric_final_samples = 0
         true_detections = 0
         for _, column_letter, header in sample_cols:
             value = safe_float(raw_data.get(compound, {}).get(column_letter))
@@ -777,8 +778,11 @@ def compute_analysis_results(raw_data, blank_cols, sample_cols, cfg):
             final_value = round6(final_value)
             sample_values[header] = final_value
             final_values.append(final_value)
+            numeric_final_samples += 1
 
-        if final_values:
+        df_fraction = numeric_final_samples / len(sample_cols) if sample_cols else 0.0
+        statistics_eligible = df_fraction > 0.5
+        if final_values and statistics_eligible:
             statistics_values = {
                 'mean': statistics.mean(final_values),
                 'geomean': statistics.geometric_mean(final_values) if all(value > 0 for value in final_values) else None,
@@ -803,7 +807,10 @@ def compute_analysis_results(raw_data, blank_cols, sample_cols, cfg):
             'detections': detections,
             'valid_samples': valid_samples,
             'true_detections': true_detections,
-            'df_fraction': true_detections / valid_samples if valid_samples else 0.0,
+            # Old template rule: numeric final-result cells divided by all
+            # nominal sample columns. Missing source cells remain in the denominator.
+            'df_fraction': df_fraction,
+            'statistics_eligible': statistics_eligible,
             'final_values': final_values,
             **statistics_values,
         }
@@ -935,7 +942,7 @@ def compute_preview_summary(raw_data, blank_cols, sample_cols, cfg):
     compounds = cfg.get('target_compounds') or []
     for compound in compounds:
         analysis = analysis_results[compound]
-        if analysis['final_values']:
+        if analysis['statistics_eligible']:
             median_iqr = (
                 f'{_format_significant(analysis["median"])} '
                 f'({_format_significant(analysis["p25"])}-{_format_significant(analysis["p75"])})'
@@ -1624,30 +1631,30 @@ def build_sheet4(wb, raw_data, sample_cols, blank_info, s3_first, S, cfg):
         del_ = get_column_letter(detection_end)
         dsr = f'{dsl}{row}:{del_}{row}'
 
-        # D: DF 检出率
+        # D: DF 检出率，恢复旧模板规则：有数值结果数 ÷ 全部样品列数。
         cd = ws.cell(row=row, column=4)
-        cd.value = f'=IFERROR(COUNTIF({dsr},">0")/COUNT({dsr}),0)'
+        cd.value = f'=COUNT({sr})/COLUMNS({sr})'
         cd.number_format = '0.00%'
         sty(cd, S['stat'])
         cache_formula_value(cfg, ws, cd, analysis['df_fraction'])
 
-        # E~I: MEAN, GEOMEAN, MEDIAN, MIN, MAX
+        # E~I: 旧模板规则，DF>50%才计算，否则显示NC。
         funcs = {5:'AVERAGE', 6:'GEOMEAN', 7:'MEDIAN', 8:'MIN', 9:'MAX'}
         statistic_keys = {5:'mean', 6:'geomean', 7:'median', 8:'min', 9:'max'}
         for col, func in funcs.items():
             c = ws.cell(row=row, column=col)
-            c.value = f'=IF(COUNT({sr})>0,{func}({sr}),"NC")'
+            c.value = f'=IF(D{row}>50%,{func}({sr}),"NC")'
             c.number_format = '0.000000'
             sty(c, S['stat'])
-            cache_formula_value(cfg, ws, c, analysis[statistic_keys[col]] if analysis['final_values'] else 'NC')
+            cache_formula_value(cfg, ws, c, analysis[statistic_keys[col]] if analysis['statistics_eligible'] else 'NC')
 
         # J~M: Percentiles
         for col, pct, key in [(10,0.05,'p05'),(11,0.25,'p25'),(12,0.75,'p75'),(13,0.95,'p95')]:
             c = ws.cell(row=row, column=col)
-            c.value = f'=IF(COUNT({sr})>0,PERCENTILE({sr},{pct}),"NC")'
+            c.value = f'=IF(D{row}>50%,PERCENTILE({sr},{pct}),"NC")'
             c.number_format = '0.000000'
             sty(c, S['stat'])
-            cache_formula_value(cfg, ws, c, analysis[key] if analysis['final_values'] else 'NC')
+            cache_formula_value(cfg, ws, c, analysis[key] if analysis['statistics_eligible'] else 'NC')
 
         # 样品数据列 P~CX
         for i, (_, _, sample_header) in enumerate(sample_cols):
@@ -1716,18 +1723,17 @@ def build_summary_sheet(wb, final_sheet, blank_info, sample_cols, S, cfg):
         # consistent with the online preview and the "DF (%)" heading.
         df_cell = ws.cell(row=row, column=3, value=f'={significant_digits_formula(f"\'{final_name}\'!D{final_row}*100")}')
         cache_formula_value(cfg, ws, df_cell, _round_significant(analysis['df_fraction'] * 100))
-        # The result sheet summarizes all final concentrations independently
-        # from DF. Final values include approved 1/2 MDL substitutions.
+        # Old template rule: descriptive statistics are displayed only at DF>50%.
         median_formula = significant_digits_formula(f'MEDIAN({sample_range})')
         q1_formula = significant_digits_formula(f'PERCENTILE({sample_range},0.25)')
         q3_formula = significant_digits_formula(f'PERCENTILE({sample_range},0.75)')
         median_cell = ws.cell(row=row, column=4, value=(
-            f'=IF(COUNT({sample_range})>0,{median_formula}&" ("&{q1_formula}&"-"&{q3_formula}&")","NC")'
+            f'=IF(\'{final_name}\'!D{final_row}>50%,{median_formula}&" ("&{q1_formula}&"-"&{q3_formula}&")","NC")'
         ))
         median_iqr = (
             f'{_format_significant(analysis["median"])} '
             f'({_format_significant(analysis["p25"])}-{_format_significant(analysis["p75"])})'
-            if analysis['final_values'] else 'NC'
+            if analysis['statistics_eligible'] else 'NC'
         )
         cache_formula_value(cfg, ws, median_cell, median_iqr)
         blank_row = blank_info['row_map'].get(compound)
@@ -1773,7 +1779,8 @@ def build_info_sheet(wb, S, cfg):
         ['MDL (blank zero)', '3 × calibration concentration ÷ S/N', 'User-entered calibration point and S/N', 'Blank cells are missing, not zero.' if english else '空单元格为缺失值，不等于0。'],
         ['MQL', 'mean(blank)+10×SD(blank); blank zero: 10×calibration concentration÷S/N', 'Same blank inputs as MDL', 'Reported in final sample units.' if english else '按最终样本单位报告。'],
         ['Final concentration', 'If vial concentration ≥ vial MDL: (vial concentration - blank mean) × conversion factor; otherwise 1/2 final MDL', 'Vial concentration + blank/MDL sheet', 'Original blank cells remain blank.' if english else '原始空白单元格保持空白。'],
-        ['DF', 'True detections ÷ valid samples', 'Hidden detection status', 'True detection = original vial concentration ≥ vial MDL.' if english else '真实检出=原始瓶内浓度≥瓶内MDL。'],
+        ['DF', 'COUNT(final sample results) ÷ COLUMNS(all sample columns)', 'Final concentration sample range', 'Numeric half-MDL substitutes count; missing source cells remain in the denominator.' if english else '有数值最终浓度数÷全部样品列数；1/2 MDL替代值计数，原始空单元格仍占分母。'],
+        ['Descriptive statistics', 'Only calculated when DF>50%; otherwise NC', 'Final concentration sample range', 'Mean, geometric mean, median, min, max and percentiles follow the old template gate.' if english else 'MEAN、几何平均、MEDIAN、MIN、MAX及百分位数均恢复旧模板DF>50%门槛。'],
         ['IS measured concentrations', 'Copied per IS and per MS cell; no recovery calculation', 'Original unprocessed MS columns', 'IS correction is controlled only by the IS-corrected setting.' if english else 'IS实测浓度由原始未处理表对应MS列自动提取；是否IS校正仍只由界面“数据是否经过IS校正”控制。'],
         ['Parameters', f'sample={cfg["sample_type"]}; sample volume={cfg["sample_volume_ml"]} mL; final volume={cfg["final_volume_ml"]} mL; conversion factor={cfg["conversion_factor"]}', '', ''],
     ]

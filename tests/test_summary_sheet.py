@@ -38,8 +38,8 @@ class SummarySheetTests(unittest.TestCase):
         self.assertIn('ROUND', str(ws['F4'].value))
         self.assertIn('ROUND', str(ws['C4'].value))
         self.assertIn('Blanks_MDL', str(ws['F4'].value))
-        self.assertNotIn('>50%', str(ws['D4'].value))
-        self.assertIn('真实检出率', str(ws['A2'].value))
+        self.assertIn('>50%', str(ws['D4'].value))
+        self.assertIn('有数值最终浓度', str(ws['A2'].value))
         self.assertEqual(ws['B4'].value, 'C8')
         self.assertIn('*100', str(ws['C4'].value))
         self.assertEqual(ws['C4'].number_format, 'General')
@@ -48,13 +48,13 @@ class SummarySheetTests(unittest.TestCase):
         blanks = wb['Blanks_MDL 空白基质检出限']
         self.assertNotIn('>50%', str(blanks['I1'].value))
 
-    def test_legacy_final_statistics_are_not_gated_by_df(self):
+    def test_legacy_final_statistics_are_gated_by_df(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'demo_urine_qac_masshunter.xlsx'), 'rb') as source:
             raw = source.read()
         output, _ = processor.process({'input_bytes': raw, 'input_file': '', 'output_file': 'final.xlsx'}, return_bytes=True)
         wb = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
         ws = wb[next(s for s in wb.sheetnames if s.startswith('Final. conc'))]
-        self.assertNotIn('>50%', str(ws['E4'].value))
+        self.assertIn('>50%', str(ws['E4'].value))
 
     def test_stats_source_sheet_does_not_claim_a_df_over_50_gate(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'process_lcms_data.py'), encoding='utf-8-sig') as handle:

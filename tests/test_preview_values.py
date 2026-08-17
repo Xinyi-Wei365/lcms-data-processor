@@ -26,7 +26,7 @@ class PreviewValueTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]['名称'], 'C8-BAC')
         self.assertEqual(rows[0]['链长'], 'C8')
-        self.assertAlmostEqual(rows[0]['DF (%)'], 50.0)
+        self.assertAlmostEqual(rows[0]['DF (%)'], 100.0)
         # With the confirmed rule, the vial MDL is 2.393 ppb.  F1 (2.0)
         # is therefore a valid non-detect and becomes 1/2 MDL; F2 (3.0) is
         # a true detection and becomes 3.0 - blank mean (1.0) = 2.0.
@@ -48,7 +48,7 @@ class PreviewValueTests(unittest.TestCase):
         # samples are true detections: (2-1)=1 and (3-1)=2.
         self.assertEqual(rows, [{'名称': 'C8-BAC', 'F1': 1.0, 'F2': 2.0}])
 
-    def test_df_counts_only_true_detections_not_half_mdl_substitutions(self):
+    def test_df_counts_numeric_results_including_half_mdl_substitutions(self):
         raw_data = {
             'C8-BAC': {
                 'B': 1.0, 'C': 1.0, 'D': 1.0,
@@ -62,11 +62,9 @@ class PreviewValueTests(unittest.TestCase):
             {'target_compounds': ['C8-BAC'], 'conversion_factor': 1.0, 'mql_factor': 3.333333}
         )
 
-        # Only F3 is a true detection. F1/F2 are 1/2 MDL substitutions and
-        # F4 is missing, so DF is 1 true detection out of 3 valid samples.
-        self.assertAlmostEqual(rows[0]['DF (%)'], 33.3)
-        # DF is shown independently. All available final concentrations,
-        # including 1/2 MDL substitutions, are summarized regardless of DF.
+        # F1/F2/F3 are numeric final results and F4 is missing, so the old
+        # template DF is 3 numeric cells divided by 4 nominal sample columns.
+        self.assertAlmostEqual(rows[0]['DF (%)'], 75.0)
         self.assertEqual(rows[0]['Median (Q1-Q3)'], '0.5 (0.5-0.75)')
 
     def test_blank_zero_preview_reports_mdl_and_mql_in_sample_units(self):

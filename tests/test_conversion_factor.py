@@ -31,7 +31,7 @@ class ConversionFactorTests(unittest.TestCase):
         self.assertIn("'Blanks_MDL 空白基质检出限'!E5", final_ws['P4'].value)
         self.assertNotIn("'Blanks_MDL 空白基质检出限'!E5*$B$38", final_ws['P4'].value)
 
-    def test_final_df_uses_true_detection_status_not_final_numeric_values(self):
+    def test_final_df_uses_old_template_numeric_results_over_all_columns(self):
         raw = (
             'Name,Ion,BLANK1,BLANK2,MS1,F1,F2,F3\n'
             'C8-BAC,248>91,1,1,10,0.5,0.6,2\n'
@@ -48,11 +48,9 @@ class ConversionFactorTests(unittest.TestCase):
         wb = openpyxl.load_workbook(io.BytesIO(output), data_only=False)
         final_ws = wb['Final. conc 最终计算浓度']
 
-        self.assertIn('COUNTIF(', final_ws['D4'].value)
-        self.assertIn('>0', final_ws['D4'].value)
-        self.assertNotIn('COUNT(P4:R4)', final_ws['D4'].value)
+        self.assertEqual(final_ws['D4'].value, '=COUNT(P4:R4)/COLUMNS(P4:R4)')
         info_ws = wb['计算说明']
-        self.assertTrue(any('原始瓶内浓度≥瓶内MDL' in str(info_ws.cell(row, 4).value)
+        self.assertTrue(any('有数值最终浓度数÷全部样品列数' in str(info_ws.cell(row, 4).value)
                             for row in range(1, info_ws.max_row + 1)))
 
 
