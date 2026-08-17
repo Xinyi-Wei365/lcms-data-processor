@@ -154,25 +154,24 @@ class CsvOutputAndUiTests(unittest.TestCase):
     def test_ss_matrix_spike_values_are_entered_in_one_sidebar_text_box(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn('每行格式：替代物名称，MS1浓度，MS2浓度……', source)
+        self.assertIn('每行填写一个替代物：名称，MS1加标浓度，MS2加标浓度……', source)
         self.assertIn('d7-C12-BAC，4，8，12', source)
         self.assertIn('d9-C10-ATMAC；2；2；4', source)
         self.assertNotIn("key=f'ss_matrix_spike_{ss_index}_{ms_index}'", source)
         table_region = source[source.index('ms_rows = []'):source.index('ms_table = st.data_editor')]
         self.assertNotIn("roles_for_ms['ss_compounds']", table_region)
 
-    def test_sidebar_shows_complete_ss_name_and_concentration_example(self):
+    def test_sidebar_shows_concise_ss_matrix_spike_instructions_without_duplicate_info_box(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
             source = handle.read()
-        self.assertIn("'ss_input_example_title'", source)
-        self.assertIn('名称必须与未处理表中的化合物名称完全一致', source)
-        self.assertIn('浓度依次对应MS1、MS2、MS3……', source)
-        self.assertIn('替代物自身的基质加标浓度', source)
-        self.assertIn('一定不是未处理原始数据表中仪器检测出来的浓度', source)
-        self.assertIn('禁止复制原始表中的MS实测值', source)
-        self.assertIn('SS回收率 = 原始表中的SS实测浓度 ÷ 用户填写的SS自身基质加标浓度 × 100%', source)
-        self.assertIn('示例数字仅用于说明填写方法，不会自动写入真实计算', source)
-        self.assertIn("st.info(t('ss_input_example_body', L))", source)
+        self.assertIn('每行填写一个替代物：名称，MS1加标浓度，MS2加标浓度……', source)
+        self.assertIn('名称须与原始表完全一致', source)
+        self.assertIn('不是原始表中的MS实测浓度', source)
+        self.assertIn('实际有几个MS，就填写几个浓度', source)
+        self.assertIn('支持中英文逗号、分号或Tab分隔', source)
+        self.assertIn('回收率 = 原始表SS实测浓度 ÷ 填写的SS基质加标浓度 × 100%', source)
+        self.assertNotIn("st.info(t('ss_input_example_body', L))", source)
+        self.assertNotIn("st.markdown(f\"**{t('ss_input_example_title', L)}**\")", source)
 
     def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:

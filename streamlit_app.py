@@ -30,7 +30,7 @@ parse_ss_matrix_spike_entries = processor.parse_ss_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-compact-ss-input-v8'
+APP_VERSION = '2026.08.17-concise-ss-help-v9'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -143,7 +143,7 @@ T = {
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
     'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
-    'custom_ss_help':       {'zh': '每行格式：替代物名称，MS1浓度，MS2浓度……。名称必须与未处理表中的化合物名称完全一致；浓度依次对应MS1、MS2、MS3……实际列。这里填写的是替代物自身的基质加标浓度，即实验设计中的理论加入浓度。注意：这些数值一定不是未处理原始数据表中仪器检测出来的浓度，禁止复制原始表中的MS实测值。不同实验MS数量可能不同：有几个MS就填写几个浓度。分隔符支持英文逗号“,”、中文逗号“，”、英文分号“;”、中文分号“；”和Tab；每个替代物单独一行。SS回收率 = 原始表中的SS实测浓度 ÷ 用户填写的SS自身基质加标浓度 × 100%。', 'en': 'One SS per line: compound name, MS1 concentration, MS2 concentration, etc. The name must exactly match the unprocessed file. Each following value is the surrogate’s own matrix-spike concentration (the theoretical amount added in the experiment) for the corresponding detected MS1, MS2, MS3, etc. It is definitely not an instrument-measured MS concentration from the raw file; do not copy raw MS measured values here. Enter one value for every actual MS column. English/Chinese commas, English/Chinese semicolons, and Tab are supported. SS recovery = measured SS concentration in the raw MS column / user-entered SS matrix-spike concentration x 100%.'},
+    'custom_ss_help':       {'zh': '每行填写一个替代物：名称，MS1加标浓度，MS2加标浓度……。名称须与原始表完全一致；后面的数值依次对应实际MS列，是该替代物自身的理论基质加标浓度，不是原始表中的MS实测浓度。实际有几个MS，就填写几个浓度。支持中英文逗号、分号或Tab分隔。回收率 = 原始表SS实测浓度 ÷ 填写的SS基质加标浓度 × 100%。', 'en': 'Enter one surrogate per line: name, MS1 spike concentration, MS2 spike concentration, etc. The name must exactly match the raw file. Following values correspond to the actual MS columns and are the surrogate’s own theoretical matrix-spike concentrations, not measured MS concentrations from the raw file. Enter one concentration for every actual MS column. English/Chinese commas, semicolons, and Tab are supported. Recovery = measured SS concentration in the raw file / entered SS matrix-spike concentration x 100%.'},
     'custom_ss_placeholder': {'zh': 'd7-C12-BAC，4，8，12\nd9-C10-ATMAC；2；2；4',             'en': 'd7-C12-BAC,4,8,12\nd9-C10-ATMAC;2;2;4'},
     'custom_is':            {'zh': '自定义 IS 内标（可选）',                         'en': 'Custom IS internal standards (optional)'},
     'custom_is_help':       {'zh': '这里只输入IS化合物名称，不输入浓度。多个名称可使用：英文逗号“,”、中文逗号“，”、英文分号“;”、中文分号“；”、Tab或换行分隔。系统会与上传文件中的化合物自动匹配并识别为IS；IS不计算回收率。是否使用IS校正仍由上方选项决定。',
@@ -215,11 +215,6 @@ T = {
     'ss_spike_required': {'zh': 'SS基质加标浓度必须填写完整，不能使用系统猜测值。请填写：', 'en': 'Every SS matrix-spike concentration is required; the app will not guess values. Enter: '},
     'ss_spike_sidebar_header': {'zh': 'SS替代物基质加标浓度（必填）', 'en': 'SS matrix-spike concentrations (required)'},
     'ss_spike_sidebar_help': {'zh': '以下是实际计算输入，不是示例。系统根据上传文件识别到的MS列自动生成；请填写每个SS在每个MS中的自身基质加标浓度。', 'en': 'These are real calculation inputs, not examples. They follow the MS columns detected in the uploaded file; enter each SS compound’s own matrix-spike concentration for every MS.'},
-    'ss_input_example_title': {'zh': 'SS名称和自身基质加标浓度填写示例', 'en': 'Example: SS names and their matrix-spike concentrations'},
-    'ss_input_example_body': {
-        'zh': '示例：\n`d7-C12-BAC，4，8，12`\n`d9-C10-ATMAC；2；2；4`\n\n名称后的4、8、12依次对应实际MS1、MS2、MS3列中d7-C12-BAC自身的理论基质加标浓度；2、2、4同理。它们是计算回收率所用的分母，一定不是原始表中仪器检测出来的MS实测浓度。示例数字仅用于说明填写方法，不会自动写入真实计算。',
-        'en': 'Examples:\n`d7-C12-BAC,4,8,12`\n`d9-C10-ATMAC;2;2;4`\n\nAfter the name, 4, 8 and 12 are d7-C12-BAC theoretical matrix-spike concentrations corresponding in order to the actual MS1, MS2 and MS3 columns; 2, 2 and 4 work the same way. They are denominators used to calculate recovery, not instrument-measured MS concentrations from the raw file. Example numbers only explain the input format and are never inserted into real calculations.',
-    },
     'role_overlap': {'zh': '同一化合物不能同时作为 IS 与 SS：', 'en': 'An analyte cannot be both IS and SS: '},
 }
 
@@ -326,9 +321,6 @@ with st.sidebar:
         key='custom_ss_text',
         label_visibility='collapsed',
     )
-    st.markdown(f"**{t('ss_input_example_title', L)}**")
-    st.info(t('ss_input_example_body', L))
-
     st.subheader(t('custom_is', L))
     st.caption(t('custom_is_help', L))
     custom_is_text = st.text_area(
