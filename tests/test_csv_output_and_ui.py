@@ -115,6 +115,8 @@ class CsvOutputAndUiTests(unittest.TestCase):
         self.assertIn('d7-C12-BAC，d9-C10-ATMAC', source)
         self.assertIn('parse_compound_name_entries(custom_ss_text)', source)
         self.assertIn('missing_custom_ss', source)
+        self.assertIn('SS基质加标浓度必须填写', source)
+        self.assertNotIn('这里只输入SS化合物名称，不输入浓度', source)
 
     def test_ui_exposes_custom_is_name_input_and_keeps_correction_separate(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
@@ -140,6 +142,15 @@ class CsvOutputAndUiTests(unittest.TestCase):
             source = handle.read()
         table_region = source[source.index('ms_rows = []'):source.index('ms_table = st.data_editor')]
         self.assertNotIn("('IS', roles_for_ms['is_compounds'])", table_region)
+
+    def test_ss_matrix_spike_cells_have_no_silent_four_ppb_default_and_are_required(self):
+        with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:
+            source = handle.read()
+        self.assertIn("default_concentration = None if role == 'SS'", source)
+        self.assertIn('required=True', source)
+        self.assertIn('missing_matrix_spike_entries(', source)
+        self.assertIn('not ss_spike_ready', source)
+        self.assertNotIn('ss_concentrations = {name: 4.0', source)
 
     def test_ui_does_not_show_fixed_d7_and_d9_surrogate_concentration_boxes(self):
         with open(__import__('os').path.join(__import__('os').path.dirname(__file__), '..', 'streamlit_app.py'), encoding='utf-8-sig') as handle:

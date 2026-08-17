@@ -126,6 +126,22 @@ class DynamicRulesTests(unittest.TestCase):
         names = processor.parse_compound_name_entries('IS-A，IS-B\nIS-A')
         self.assertEqual(names, ['IS-A', 'IS-B'])
 
+    def test_missing_ss_matrix_spikes_reports_every_unfilled_ms_cell(self):
+        missing = processor.missing_matrix_spike_entries(
+            ['SS-A', 'SS-B'], ['MS1', 'MS2'],
+            {
+                'SS-A': {'MS1': 4, 'MS2': None},
+                'SS-B': {'MS1': 0, 'MS2': 8},
+            },
+        )
+        self.assertEqual(missing, [('SS-A', 'MS2'), ('SS-B', 'MS1')])
+
+    def test_missing_ss_matrix_spikes_accepts_positive_finite_values(self):
+        missing = processor.missing_matrix_spike_entries(
+            ['SS-A'], ['MS1', 'MS2'], {'SS-A': {'MS1': 4, 'MS2': 8}}
+        )
+        self.assertEqual(missing, [])
+
     def test_custom_ss_is_moved_to_recovery_section_and_uses_its_own_spike(self):
         raw = (
             'Name,Ion,BLANK1,BLANK2,MS1,MS2,F1\n'

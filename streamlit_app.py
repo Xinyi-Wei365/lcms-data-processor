@@ -25,10 +25,11 @@ compute_preview_final_table = processor.compute_preview_final_table
 build_blank_mdl_evidence = processor.build_blank_mdl_evidence
 parse_custom_ss_entries = processor.parse_custom_ss_entries
 parse_compound_name_entries = processor.parse_compound_name_entries
+missing_matrix_spike_entries = processor.missing_matrix_spike_entries
 compound_classification_rows = processor.compound_classification_rows
 compound_metadata_for = processor.compound_metadata_for
 
-APP_VERSION = '2026.08.17-dynamic-ss-is-names-v4'
+APP_VERSION = '2026.08.17-required-ss-spikes-v5'
 
 try:
     validate_input_layout = processor.validate_input_layout
@@ -141,7 +142,7 @@ T = {
     'ss_spike_grid':        {'zh': '已选 SS 的理论加标浓度（ppb）',                   'en': 'Theoretical spike concentration for selected SS (ppb)'},
     'is_spike_grid':        {'zh': '已选 IS 的加入浓度（ppb，仅记录）',               'en': 'Addition concentration for selected IS (ppb, record only)'},
     'custom_ss':            {'zh': '自定义 SS 替代物（可选）',                       'en': 'Custom SS surrogates (optional)'},
-    'custom_ss_help':       {'zh': '这里只输入SS化合物名称，不输入浓度。多个名称可使用：英文逗号“,”、中文逗号“，”、英文分号“;”、中文分号“；”、Tab或换行分隔。名称须与上传文件一致。上传后，系统会按实际MS列数量生成基质加标浓度表；用户填写的SS基质加标浓度是回收率分母，原始MS实测浓度由系统自动读取。', 'en': 'Enter SS compound names only, without concentrations. Separate names with an English comma, Chinese comma, English semicolon, Chinese semicolon, Tab, or a new line. Names must match the uploaded file. After upload, the app creates matrix-spike inputs for the actual MS columns; SS matrix-spike concentrations are recovery denominators and measured MS values are read automatically.'},
+    'custom_ss_help':       {'zh': '先在此输入SS化合物名称。多个名称可使用：英文逗号“,”、中文逗号“，”、英文分号“;”、中文分号“；”、Tab或换行分隔。名称须与上传文件一致。上传后，必须在系统按实际MS列生成的表格中，逐格填写每个SS自身的基质加标浓度（ppb）；该浓度是SS回收率分母，原始MS实测浓度由系统自动读取，两者不是同一个数值。', 'en': 'First enter the SS compound names here. Separate names with an English comma, Chinese comma, English semicolon, Chinese semicolon, Tab, or a new line. Names must match the uploaded file. After upload, every SS matrix-spike concentration must be entered for every detected MS column. It is the recovery denominator; measured MS concentration is read from the source and is a different value.'},
     'custom_ss_placeholder': {'zh': 'd7-C12-BAC，d9-C10-ATMAC\nMy Surrogate',             'en': 'd7-C12-BAC, d9-C10-ATMAC\nMy Surrogate'},
     'custom_is':            {'zh': '自定义 IS 内标（可选）',                         'en': 'Custom IS internal standards (optional)'},
     'custom_is_help':       {'zh': '这里只输入IS化合物名称，不输入浓度。多个名称可使用：英文逗号“,”、中文逗号“，”、英文分号“;”、中文分号“；”、Tab或换行分隔。系统会与上传文件中的化合物自动匹配并识别为IS；IS不计算回收率。是否使用IS校正仍由上方选项决定。',
@@ -210,6 +211,7 @@ T = {
     'result_formula_note': {'zh': '下载的 Excel 保留可审计公式；在线预览显示按同一规则计算的数值。', 'en': 'The downloaded Excel keeps auditable formulas; the online preview shows numeric values calculated with the same rules.'},
     'custom_is_missing': {'zh': '未在上传文件中找到自定义 IS：', 'en': 'Custom IS was not found in the uploaded file: '},
     'custom_ss_missing': {'zh': '未在上传文件中找到自定义 SS：', 'en': 'Custom SS was not found in the uploaded file: '},
+    'ss_spike_required': {'zh': 'SS基质加标浓度必须填写完整，不能使用系统猜测值。请填写：', 'en': 'Every SS matrix-spike concentration is required; the app will not guess values. Enter: '},
     'role_overlap': {'zh': '同一化合物不能同时作为 IS 与 SS：', 'en': 'An analyte cannot be both IS and SS: '},
 }
 
@@ -410,6 +412,7 @@ mdl_overrides = {}
 mql_factor = 3.333333
 layout_is_ready = False
 mdl_evidence_ready = False
+ss_spike_ready = True
 
 if file_bytes:
     st.subheader(t('raw_preview', L))
@@ -496,14 +499,14 @@ if file_bytes:
             role_column = t('ms_table_role', L)
             for role, names in (('Target', roles_for_ms['target_compounds']), ('SS', roles_for_ms['ss_compounds'])):
                 for name in names:
-                    default_concentration = 4.0 if role == 'SS' else float(spike_conc)
+                    default_concentration = None if role == 'SS' else float(spike_conc)
                     ms_rows.append({compound_column: name, role_column: role_label(role, L), **{header: default_concentration for _, _, header in mss}})
             ms_table = st.data_editor(
                 pd.DataFrame(ms_rows),
                 column_config={
                     header: st.column_config.NumberColumn(
                         (f'MS{index}基质加标浓度（ppb）' if L == 'zh' else f'MS{index} matrix-spike concentration (ppb)'),
-                        min_value=0.000001, step=0.1, format='%.6f',
+                        min_value=0.000001, step=0.1, format='%.6f', required=True,
                     )
                     for index, (_, _, header) in enumerate(mss, 1)
                 },
@@ -511,12 +514,23 @@ if file_bytes:
                 key='compound_matrix_spike_concentration_table',
             )
             matrix_spike_concentrations = {
-                row[compound_column]: {header: float(row[header]) for _, _, header in mss}
+                row[compound_column]: {header: processor.safe_float(row[header]) for _, _, header in mss}
                 for _, row in ms_table.iterrows()
             }
+            missing_ss_spikes = missing_matrix_spike_entries(
+                roles_for_ms['ss_compounds'],
+                [header for _, _, header in mss],
+                matrix_spike_concentrations,
+            )
+            ss_spike_ready = not missing_ss_spikes
+            if missing_ss_spikes:
+                st.error(
+                    t('ss_spike_required', L)
+                    + ', '.join(f'{compound} / {header}' for compound, header in missing_ss_spikes)
+                )
         # The two-dimensional MS table is the source of truth.  Keep these
         # one-value maps only as backward-compatible fallbacks for old files.
-        ss_concentrations = {name: 4.0 for name in selected_ss}
+        ss_concentrations = {}
         is_spike_concentrations = {}
 
         # This table reflects the final user-confirmed IS/SS selection, not
@@ -623,7 +637,7 @@ if file_bytes:
 st.divider()
 process_btn = st.button(
     t('process_btn', L), type="primary",
-    disabled=(file_bytes is None or not layout_is_ready or not mdl_evidence_ready),
+    disabled=(file_bytes is None or not layout_is_ready or not mdl_evidence_ready or not ss_spike_ready),
     width='stretch',
 )
 

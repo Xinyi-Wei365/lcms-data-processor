@@ -36,5 +36,7 @@
 - [ ] Add failing UI assertions for bilingual punctuation instructions, copyable SS/IS name examples, dynamic MS columns, and IS exclusion from the concentration editor.
 - [ ] Run the focused UI test and confirm the new assertions fail before changing production text.
 - [ ] Update the bilingual SS/IS help and placeholder text so both inputs accept names only. Rename SS example and editor columns to matrix-spike concentration, dynamically label all detected MS columns, and exclude IS from the editor.
+- [ ] Add failing validation tests proving that every SS-by-MS concentration is required, zero/blank values are rejected, and no 4 ppb default is injected.
+- [ ] Start SS editor cells empty, list every missing SS/MS pair, and disable processing until all required SS concentrations are positive.
 - [ ] Run both focused tests and confirm they pass.
 - [ ] Run `python -m unittest discover -s tests -v` and `git diff --check` before committing.

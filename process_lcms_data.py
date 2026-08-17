@@ -484,6 +484,19 @@ def parse_compound_name_entries(text):
     return names
 
 
+def missing_matrix_spike_entries(compounds, ms_headers, concentrations):
+    """Return compound/MS cells without a positive finite spike value."""
+    missing = []
+    configured = concentrations or {}
+    for compound in compounds or []:
+        compound_values = configured.get(compound) or {}
+        for header in ms_headers or []:
+            value = safe_float(compound_values.get(header))
+            if value is None or not math.isfinite(value) or value <= 0:
+                missing.append((compound, header))
+    return missing
+
+
 def one_sided_t99(sample_count):
     """Return t(0.99, n-1) for the available number of replicates."""
     n = int(sample_count or 0)

@@ -14,7 +14,7 @@ Both tables are bilingual and always visible. MS1/MS2/MS3 are examples only. The
 
 ## User input punctuation guidance
 
-The SS and IS custom-name input areas must show the exact accepted syntax, not only the rendered example tables. Users enter compound names only, without concentrations. Multiple names may be separated by any one of these delimiters:
+The SS and IS custom-name input areas must show the exact accepted name syntax, not only the rendered example tables. The IS workflow ends with name selection. The SS name box identifies which compounds are surrogates; after upload, the user must also enter every SS compound's own matrix-spike concentration for every detected MS column. Multiple names may be separated by any one of these delimiters:
 
 - English comma: `,`
 - Chinese comma: `，`
@@ -22,6 +22,6 @@ The SS and IS custom-name input areas must show the exact accepted syntax, not o
 - Chinese semicolon: `；`
 - Tab character
 
-The interface must include copyable SS and IS name examples. After upload, the compound-by-MS table is the source of truth for target and SS matrix-spike concentrations in every detected MS column. The SS recovery calculation pairs each measured MS value from the source with the user-entered SS matrix-spike concentration for that same MS column.
+The interface must include copyable SS and IS name examples. After upload, the compound-by-MS table is the source of truth for target and SS matrix-spike concentrations in every detected MS column. Every SS cell is required and must start empty; the app must not assume a default such as 4 ppb. Processing remains disabled until all SS cells contain positive values. The SS recovery calculation pairs each measured MS value from the source with the user-entered SS matrix-spike concentration for that same MS column.
 
 The parser and its validation messages must accept all five delimiters so the displayed guidance matches actual behavior. Invalid lines must identify the line number and restate the accepted input pattern.
